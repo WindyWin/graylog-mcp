@@ -6,8 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-17
+
 ### Changed
-- The admin page (`graylog-mcp ui`) is being rebuilt as an operations console. So far: four colour schemes (Slate,
+- The admin page (`graylog-mcp ui`) is rebuilt as an operations console: four colour schemes (Slate,
   Midnight, Graphite, Catppuccin) with light and dark themes and a comfortable or compact density, chosen in a
   Settings dialog; a sidebar in three groups (Monitor, Configure, Tools); an environment picker in the top bar
   that the screens narrow to; a status bar; keyboard shortcuts (`/`, `E`, `,`, `T`, `G` then a letter); and a new
