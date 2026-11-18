@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-import json
 import time
 
 import httpx
 import pytest
 
 from graylog_mcp import usage
+from graylog_mcp.setup.service import home_dir
+from graylog_mcp.usage_store import store
 from tests.fake_graylog import FakeGraylog
 
 
 def _lines() -> list[dict]:
-    return [json.loads(line) for line in usage.path().read_text(encoding="utf-8").splitlines()]
+    return store().read(0, detail=True)
+
+
+def _written() -> str:
+    """Everything on disk, to prove a value was never written anywhere."""
+    return "".join(p.read_text(encoding="utf-8") for p in sorted((home_dir() / "usage").rglob("*.jsonl")))
 
 
 def test_a_call_without_an_app_is_still_redacted():
@@ -27,7 +33,8 @@ def test_a_call_without_an_app_is_still_redacted():
         time.monotonic(),
         0,
     )
-    assert "fake-value" not in usage.path().read_text(encoding="utf-8")
+    written = _written()
+    assert "password" in written and "fake-value" not in written
 
 
 async def test_tool_calls_are_recorded_with_redacted_queries(make_app):
@@ -75,17 +82,13 @@ def test_summary_buckets_tools_misses_and_previous_period():
     assert len(usage.summarize(168, 6, now=now)["buckets"]) == 28
 
 
-def test_file_is_trimmed_and_can_be_turned_off(monkeypatch):
-    monkeypatch.setattr(usage, "MAX_BYTES", 2_000)
-    monkeypatch.setattr(usage, "KEEP_LINES", 5)
-    for i in range(40):
-        usage.write({"ts": time.time(), "tool": "search_logs", "n": i, "ok": True})
-    kept = _lines()
-    assert len(kept) <= 30 and kept[-1]["n"] == 39
+def test_recording_can_be_turned_off(monkeypatch):
+    usage.write({"ts": time.time(), "tool": "search_logs", "n": 1, "ok": True})
     monkeypatch.setenv("GRAYLOG_MCP_USAGE", "off")
-    before = len(_lines())
     usage.track("search_logs", None, {"query": "x"}, {"total": 1}, None, time.monotonic(), 1)
-    assert len(_lines()) == before and usage.summarize()["enabled"] is False
+    assert usage.summarize()["enabled"] is False
+    monkeypatch.delenv("GRAYLOG_MCP_USAGE")
+    assert [e.get("n") for e in _lines()] == [1]  # the call made while off was not written
 
 
 def test_results_of():
@@ -130,6 +133,19 @@ async def test_admin_usage_and_log_stats(admin_client):
     assert len(main["buckets"]) >= 24 and len(main["error_buckets"]) == len(main["buckets"])
     assert "error" in envs["down"] and "total" not in envs["down"]  # one unreachable environment, others still shown
     assert (await admin_client.get("/api/usage", headers={"X-Admin-Token": "bad"})).status_code == 401
+
+
+async def test_playground_runs_are_recorded_apart_from_the_model(admin_client):
+    ok = await admin_client.post("/api/run", json={"tool": "search_logs", "args": {"query": "*", "range": "1h"}})
+    assert ok.status_code == 200 and ok.json()["chars"] > 0
+    down = await admin_client.post(
+        "/api/run", json={"tool": "search_logs", "args": {"range": "1h"}, "instance": "down"}
+    )
+    assert down.status_code == 400 and "cannot connect" in down.json()["error"]
+    first, failed = _lines()
+    assert first["source"] == "playground" and first["conversation"] == "playground" and first["spans"]
+    assert failed["status"] == "error" and failed["instance"] == "down"
+    assert usage.summarize()["totals"]["calls"] == 0  # the admin trying a tool is not the model asking
 
 
 async def test_server_starts_without_waiting_for_graylog(make_app, monkeypatch):

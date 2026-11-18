@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Each tool call is now recorded when it starts and when it ends, with who called it (the conversation: a Codex
+  session, the HTTP session, else the server process; the client's tool call id; the client), the Graylog requests it
+  sent (path, redacted query, wait, duration, status, retries) and the first 2,000 characters of its redacted result.
+  A call that never ended reads back as running, or interrupted once its process is gone. Playground runs are recorded
+  too, apart from the model's calls. `GRAYLOG_MCP_USAGE=calls` keeps the calls without the result previews.
+
+### Changed
+- Usage records move from the single `usage.jsonl` to `usage/`, one file per process and day, so servers no longer
+  share a file. The old file is imported on first use.
+
+### Fixed
+- Redaction now masks a secret after a field name ending in a wildcard (`password*:value`), as in a query a suggested
+  fix rewrote.
+
 ## [0.4.0] - 2026-11-17
 
 ### Changed

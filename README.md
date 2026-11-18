@@ -553,10 +553,11 @@ An **environment picker** in the top bar carries one environment across Overview
 Shortcuts: <kbd>/</kbd> search, <kbd>E</kbd> environment, <kbd>,</kbd> settings, <kbd>T</kbd> theme, <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>
 switch tabs, <kbd>G</kbd> then <kbd>O</kbd>/<kbd>A</kbd>/<kbd>E</kbd>/<kbd>F</kbd>/<kbd>R</kbd>/<kbd>P</kbd>/<kbd>C</kbd> go to a screen.
 
-Tool calls are recorded by the MCP server (stdio or shared) in `~/.config/graylog-mcp/usage.jsonl`: tool,
-environment, duration, number of results, size, and the query or id asked for, **redacted with your redaction
-rules before it is written**. It stays on your machine, is trimmed past 4 MB, and `GRAYLOG_MCP_USAGE=off` in the
-server's environment turns it off.
+Tool calls are recorded by the MCP server (stdio or shared) in `~/.config/graylog-mcp/usage/`, one file per
+process and day: tool, environment, duration, number of results, size, the query or id asked for, the conversation
+it belongs to, the Graylog requests it sent and the first 2,000 characters of its result, all **redacted with your
+redaction rules before they are written**. It stays on your machine. In the server's environment,
+`GRAYLOG_MCP_USAGE=calls` keeps the calls without their results and `GRAYLOG_MCP_USAGE=off` turns recording off.
 
 <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> jumps to any page, environment, tool or action; unsaved changes show a
 save bar (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd>) and are not lost by leaving the page. Light or dark follows

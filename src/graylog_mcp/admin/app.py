@@ -40,10 +40,10 @@ from graylog_mcp.config import (
     resolve_repo_path,
 )
 from graylog_mcp.config import _parse_redaction as parse_redaction
+from graylog_mcp.recording import RecordContext, run_recorded
 from graylog_mcp.redact import PACKS, PROFILES, Redactor
 from graylog_mcp.setup import clients, configfile, connect, doctor
 from graylog_mcp.setup.detect import detect, local_timezone
-from graylog_mcp.shaping import dumps
 
 
 class AdminState:
@@ -611,7 +611,6 @@ def build_app(state: AdminState) -> Starlette:
         op = operations.playground().get(name)
         if op is None:
             return _err(f"unknown tool {name!r}")
-        fn = op.fn
         args = body.get("args") or {}
         if not isinstance(args, dict):
             return _err("args must be a JSON object")
@@ -619,12 +618,11 @@ def build_app(state: AdminState) -> Starlette:
             args["instance"] = body["instance"]
         started = time.monotonic()
         try:
-            result = await fn(await state.app(), **args)
+            result, text = await run_recorded(op, state.app, RecordContext(source="playground"), args)
         except TypeError as exc:
             return _err(f"bad arguments: {exc}")
         except (GraylogError, ConfigError, ValueError) as exc:
             return _err(str(exc))
-        text = dumps(result)
         return JSONResponse(
             {
                 "result": result,
