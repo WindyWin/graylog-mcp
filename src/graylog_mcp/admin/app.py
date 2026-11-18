@@ -265,7 +265,7 @@ def _groups_view(config: Config | None, base_dir: Path, url: str | None = None) 
 # reads it from a <meta> rather than a <base>, which the CSP forbids.
 ROOT_KEY = "graylog_mcp.admin_root"
 ROOT_MARK = "__GRAYLOG_MCP_ROOT__"
-STATIC_FILES = {"activity.js": "text/javascript; charset=utf-8"}
+STATIC_FILES = {"activity.js": "text/javascript; charset=utf-8", "logs.js": "text/javascript; charset=utf-8"}
 
 # index.html carries its own inline script and style, so the CSP must allow 'unsafe-inline' for them;
 # it still blocks framing, foreign hosts and <base>/form hijacking. Tighten with a nonce if the page is split.

@@ -697,6 +697,31 @@ th[aria-sort="ascending"] .sorth, th[aria-sort="descending"] .sorth { color: var
 .chart .pick { cursor: pointer; }
 svg.chart:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 4px; border-radius: 4px; }
 @media (pointer: coarse) { .keyhint { display: none; } }
+/* logs */
+.lgbar .spacer { flex: 1; }
+.lgbar .lgq { max-width: 30rem; flex: 2 1 260px; }
+.lgstreams { min-height: var(--control-sm); width: 13rem; max-width: 100%; padding: 0 10px; font: 13px var(--font-mono); }
+.lgcustom { display: inline-flex; flex-wrap: wrap; gap: var(--space-2xs); align-items: center; }
+.lgcustom input { min-height: var(--control-sm); font: 13px var(--font-mono); }
+.hb .track { position: relative; }
+.hb .track > i.err { position: absolute; top: 0; bottom: 0; left: 0; background: var(--color-error); }
+.hb .v { white-space: nowrap; } .hb .v b.bad, .ttable .bad { color: var(--color-error); }
+#lgtab-dashboard .hb { grid-template-columns: minmax(90px, 160px) minmax(0, 1fr) auto; }
+.lgpick { margin-top: var(--space-sm); }
+.lgmsgs td.lgmsg { max-width: 60rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.lgmsgs tr.open td { background: var(--color-paper-2); }
+.lgmsgs tr.lgdet td { white-space: normal; padding-block: var(--space-sm); }
+.lgwrap { display: flex; flex-direction: column; gap: var(--space-sm); min-width: 0; }
+.tc-det .lgwrap { padding: 0 0 var(--space-sm) 4.5rem; }
+.lgstack summary { cursor: pointer; font: 12.5px var(--font-mono); overflow-wrap: anywhere; }
+.lgstack pre.json { max-height: 40vh; margin-top: var(--space-2xs); }
+.tc-head.lgt { grid-template-columns: 4.5rem minmax(6rem, 9rem) minmax(0, 1fr) auto minmax(6rem, 0.6fr); }
+.tc-head.lgt .cwhat { font-family: var(--font-mono); }
+.lgfoot { margin-top: var(--space-sm); }
+@media (max-width: 40rem) {
+  .lgbar .spacer { display: none; } .lgbar .lgq, .lgstreams { flex: 1 1 100%; width: auto; max-width: none; }
+  .tc-head.lgt > :first-child { display: block; }
+}
 
 @media (hover: hover) {
   a:hover { color: var(--color-link-hover); }
@@ -844,6 +869,7 @@ svg.chart:focus-visible { outline: 2px solid var(--color-focus); outline-offset:
     <div class="navgroup"><div class="glabel">Monitor</div>
     <button class="nav" data-page="home"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg><span class="label-text">Overview</span></button>
     <button class="nav" data-page="activity"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="label-text">Activity</span><span class="badge fail count hidden" id="navActs"></span></button>
+    <button class="nav" data-page="logs"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h13"/></svg><span class="label-text">Logs</span></button>
     </div>
     <div class="navgroup"><div class="glabel">Configure</div>
     <button class="nav" data-page="envs"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg><span class="label-text">Environments</span><span class="badge fail count hidden" id="navEnvs"></span></button>
@@ -958,6 +984,38 @@ svg.chart:focus-visible { outline: 2px solid var(--color-focus); outline-offset:
         <div class="tabpanel" role="tabpanel" id="tab-learned" aria-labelledby="tabBtn-learned" hidden>
           <div class="cmeta"><span id="learnSub"></span></div>
           <div id="learnList"></div>
+        </div>
+      </section>
+
+      <!-- ============================================================ logs -->
+      <section class="page" id="logs" data-title="Logs" data-sub="Request logs per API, traces and messages, read from Graylog with the same redaction">
+        <div class="page-tools">
+          <span class="muted small mono" id="lgUpdated" aria-live="polite"></span>
+          <select class="sel auto-width" id="lgEvery" aria-label="Auto refresh"></select>
+          <button class="btn sm ghost" id="lgRefresh"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Refresh</button>
+          <a class="btn sm ghost" id="lgGraylog" target="_blank" rel="noopener noreferrer" hidden>Open in Graylog ↗</a>
+        </div>
+        <form class="fbar lgbar" id="lgForm" role="search" aria-label="Which logs">
+          <select class="sel auto-width" id="lgEnv" aria-label="Environment"></select>
+          <label class="search lgq"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="lgQ" type="search" placeholder="Graylog query; empty = every log" autocomplete="off" aria-label="Query"></label>
+          <input class="lgstreams" id="lgStreams" type="text" placeholder="streams (comma-separated)" autocomplete="off" aria-label="Streams, comma-separated names or ids">
+          <select class="sel auto-width" id="lgRange" aria-label="Time range"></select>
+          <span class="lgcustom" id="lgCustom" hidden><input type="datetime-local" id="lgFrom" aria-label="From"><span class="muted">to</span><input type="datetime-local" id="lgTo" aria-label="To"></span>
+          <button class="btn sm primary" type="submit">Search logs</button>
+          <span class="spacer"></span>
+          <select class="sel auto-width" id="lgFav" aria-label="Open a favourite view"></select>
+          <button class="btn sm ghost" type="button" id="lgFavSave" aria-pressed="false">☆ Save view</button>
+          <select class="sel auto-width" id="lgRecent" aria-label="Open a recent search of the agent"><option value="">Recent from the agent</option></select>
+        </form>
+        <div class="tabs" role="tablist" aria-label="Log views" id="lgTabs">
+          <button role="tab" id="lgtabBtn-dashboard" aria-controls="lgtab-dashboard" aria-selected="true" data-tab="dashboard">Dashboard</button>
+          <button role="tab" id="lgtabBtn-traces" aria-controls="lgtab-traces" aria-selected="false" tabindex="-1" data-tab="traces">By trace</button>
+          <button role="tab" id="lgtabBtn-all" aria-controls="lgtab-all" aria-selected="false" tabindex="-1" data-tab="all">All logs</button>
+        </div>
+        <div id="page-logs-body">
+          <div class="tabpanel" role="tabpanel" id="lgtab-dashboard" aria-labelledby="lgtabBtn-dashboard"></div>
+          <div class="tabpanel" role="tabpanel" id="lgtab-traces" aria-labelledby="lgtabBtn-traces" hidden></div>
+          <div class="tabpanel" role="tabpanel" id="lgtab-all" aria-labelledby="lgtabBtn-all" hidden></div>
         </div>
       </section>
 
@@ -1238,6 +1296,7 @@ jdbc:postgresql://admin:s3cret@db:5432/orders</textarea>
 <div id="toasts" aria-live="polite"></div>
 
 <script src="__GRAYLOG_MCP_ROOT__/static/activity.js"></script>
+<script src="__GRAYLOG_MCP_ROOT__/static/logs.js"></script>
 <script>
 "use strict";
 // ------------------------------------------------------------------ basics
@@ -1448,11 +1507,12 @@ function navigate(url, how = "push") {
   if (how === "none" || url === location.pathname + location.search) return;
   history[how === "replace" ? "replaceState" : "pushState"](null, "", url);
 }
-const pagePath = (name) => (name === "activity" ? activityPath() : pathOf(name));
+const pagePath = (name) => (name === "activity" ? activityPath() : name === "logs" ? logsPath() : pathOf(name));
 window.addEventListener("popstate", () => openRoute("none"));
 async function openRoute(how) {
   const r = routeOf();
   if (r.page === "activity") applyActivityRoute(r);
+  if (r.page === "logs") applyLogsRoute(r);
   await showPage(r.page, how);
 }
 async function showPage(name, how = "push") {
@@ -1474,6 +1534,7 @@ async function showPage(name, how = "push") {
   navigate(pagePath(name), how);
   const active = document.querySelector(".nav[aria-current]"); if (active) active.scrollIntoView({block: "nearest", inline: "nearest"});
   if (name === "home" || name === "activity") { loadDashboard(); if (name === "activity") { renderActivity(); loadLearned(); renderActivityTab(); } }
+  if (name === "logs") loadLogs(); else clearTimeout(LOGS.timer);
   if (name === "config") loadRaw().catch(rawLoadFailed);
   if (name === "connect") loadClients().catch(clientsLoadFailed);
   if (name === "redaction") { renderRedaction(); previewRedaction(); }
@@ -1592,7 +1653,7 @@ function renderStatusBar() {
 }
 
 // keys: / or Ctrl K palette, E environment, , settings, T light/dark, 1-4 scheme, G then a letter goes to a screen
-const GO_KEYS = {o: "home", a: "activity", e: "envs", f: "fields", r: "redaction", p: "playground", c: "connect"};
+const GO_KEYS = {o: "home", a: "activity", l: "logs", e: "envs", f: "fields", r: "redaction", p: "playground", c: "connect"};
 let goPending = 0;
 const overlayOpen = () => isShown($("modalWrap")) || isShown($("paletteWrap")) || !!document.querySelector("dialog[open]") || envOpen();
 // A shortcut that stays quiet while someone types, a dialog is open or Ctrl/Alt/Cmd is held (`when` narrows it to a screen).
@@ -2339,11 +2400,11 @@ $("learnList").addEventListener("click", async (ev) => {
 });
 
 // tabs: one tablist per page, each with its own tabs (the panels are #tab-<name>); `pick` is called with the new tab
-function tabList(listId, names, pick) {
+function tabList(listId, names, pick, prefix = "tab-") {
   const list = $(listId);
   const show = (t, focus) => {
     list.querySelectorAll("[data-tab]").forEach((b) => { const on = b.dataset.tab === t; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
-    for (const x of names) $("tab-" + x).hidden = x !== t;
+    for (const x of names) $(prefix + x).hidden = x !== t;
   };
   list.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) pick(b.dataset.tab, false); });
   list.addEventListener("keydown", (e) => {
@@ -3271,6 +3332,7 @@ $("paletteList").addEventListener("click", (e) => { const li = e.target.closest(
 (async () => {
   if (!TOKEN) { signedOut(); return; }
   initActivity();
+  initLogs();
   try {
     await loadState();
     loadSetup();

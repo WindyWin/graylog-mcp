@@ -28,7 +28,7 @@ function fmtDur(s) {
 const toolAbbr = (t) => String(t).split("_").map((w) => w[0] || "").join("").slice(0, 3);
 
 // ------------------------------------------------------------------ dashboard
-function donutHtml(parts, total) {
+function donutHtml(parts, total, unit = "calls") {
   const r = 42, c = 2 * Math.PI * r;
   let at = 0;
   const arcs = parts.filter((p) => p.value > 0).map((p) => {
@@ -37,9 +37,9 @@ function donutHtml(parts, total) {
     at += len; return arc;
   }).join("");
   const label = parts.map((p) => `${p.value} ${p.name.toLowerCase()}`).join(", ");
-  return `<div class="donut"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="${esc(`${total} calls: ${label}`)}">
+  return `<div class="donut"><svg viewBox="0 0 120 120" width="132" height="132" role="img" aria-label="${esc(`${total} ${unit}: ${label}`)}">
     <circle r="${r}" cx="60" cy="60" fill="none" stroke="var(--color-paper-3)" stroke-width="16"/>${arcs}
-    <text x="60" y="58" text-anchor="middle" class="dn">${esc(short(total))}</text><text x="60" y="74" text-anchor="middle" class="dl">calls</text></svg>
+    <text x="60" y="58" text-anchor="middle" class="dn">${esc(short(total))}</text><text x="60" y="74" text-anchor="middle" class="dl">${esc(unit)}</text></svg>
     <ul class="dlegend">${parts.map((p) => `<li><i style="background:${p.color}"></i><span>${esc(p.name)}</span><b>${num(p.value)}</b><span class="muted">${total ? Math.round(100 * p.value / total) : 0}%</span></li>`).join("")}</ul></div>`;
 }
 function renderActDashboard(u) {

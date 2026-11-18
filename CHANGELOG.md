@@ -38,6 +38,13 @@ All notable changes to this project are documented here. The format follows
 - While an admin page runs on the machine, `search_logs`, `trace_request` and `root_cause` add `ui`, a link to the
   same view in its log explorer: the instance, the redacted query and the absolute range, never the admin token. A
   trace id that redaction would change is left out of the link. `ui_links = "off"` turns the links off.
+- The admin page has a Logs screen (`/logs/dashboard`, `/logs/traces`, `/logs/all`): per application and status
+  class, a histogram and a sortable table per API (business and technical errors, p50/p95/p99, slow calls); the
+  newest traces and one trace as a timeline; every message with its fields and a folded stack trace, paged. A click
+  on a status, an application, an API or one of its counts narrows the query; a bar narrows the range. The view is in
+  the address, favourite views stay in the browser, the agent's recent searches open again, and an optional refresh
+  (30 s at the most often) pauses while the browser tab is hidden or a row is open. *Open in Graylog* opens the same
+  search there.
 
 ### Changed
 - `graylog-mcp ui` keeps its port (8765, or `--port`) instead of moving to the next free one: when that port is
