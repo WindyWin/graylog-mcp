@@ -440,7 +440,9 @@ A TOML file (`--config` or `GRAYLOG_MCP_CONFIG`, else `.graylog-mcp.toml` in the
 parent up to the repository root, else `~/.config/graylog-mcp/config.toml`) covers the
 rest: several instances, token or basic auth, TLS verification and CA bundle, proxy, timezone,
 `trace_fields`, `error_query` (because `level` is a syslog number or a string depending on how logs are
-shipped), `app_packages`, redaction packs and custom patterns, presets and limits. Secrets are never
+shipped), `app_packages`, how request logs read (`endpoint_fields`, `status_fields`, `business_error_query`,
+`technical_error_query`, `slow_ms`, `latency_unit`, for the Logs screen of the admin UI), `ui_links`, redaction
+packs and custom patterns, presets and limits. Secrets are never
 written in the file; it names the environment variable that holds them (`token_env`, `password_env`).
 The file is validated at startup and any mistake (unknown key, bad regex, unknown timezone, missing
 secret) stops the server with a precise message.
@@ -522,7 +524,7 @@ Clients that do not start the server inside the repository (Claude Desktop) need
 | `graylog-mcp init` | Guided setup: environments, connection test, field detection, config file, client registration. `--yes --env staging=https://... --env prod=https://...` for scripts. |
 | `graylog-mcp login [INSTANCE...]` | Asks for each missing token/password, tests it, and saves it for this user in `~/.config/graylog-mcp/secrets.toml` (owner-only permissions, outside any repository). The server reads environment variables first, then this file. `graylog-mcp logout` forgets them. |
 | `graylog-mcp doctor` | Checks every environment (token set, reachable, TLS, version, readable streams, data, configured fields exist, error query matches, redaction) and prints a fix for each problem. Exit code 1 on failure, `--json` for CI. |
-| `graylog-mcp detect` | Suggests `service_fields`, `trace_fields`, `version_fields`, `latency_fields`, `error_query` (syslog numbers or words), exception/logger fields and `app_packages` from the logs, with coverage and redacted sample values. `--apply` writes them. |
+| `graylog-mcp detect` | Suggests `service_fields`, `trace_fields`, `version_fields`, `latency_fields`, `endpoint_fields` (a route template before a path with ids in it), `status_fields` (only a field holding HTTP codes), `error_query` (syslog numbers or words), exception/logger fields and `app_packages` from the logs, with coverage and redacted sample values. `--apply` writes them. |
 | `graylog-mcp install <client>` | Registers the server in `claude-code` (`.mcp.json`), `cursor`, `vscode` or `claude-desktop`, merging with existing entries and keeping a `.bak`. Tokens are referenced as `${VAR}` / `${env:VAR}`, never written (Claude Desktop gets placeholders unless `--with-secrets`). |
 | `graylog-mcp install claude-code --trace` | Opt-in: adds two hooks to your Claude Code settings (`~/.claude/settings.json`, or `.claude/settings.local.json` with `--scope project`) so the admin page groups calls by conversation, subagent and turn. They record hashed ids only, never the prompt's text. `--untrace` takes them out; your own hooks are kept. The admin page's Connect screen has the same switch. |
 | `graylog-mcp ui` | Local admin web UI (below). |
@@ -547,6 +549,22 @@ Clients that do not start the server inside the repository (Claude Desktop) need
   *Playground runs* counts the Playground's own calls too. Every view has its own address
   (`/admin/activity/conversations/<id>?turn=<ms>`), so a link to a turn or call can be bookmarked or shared
   with someone who has the page's token;
+- **Logs**: request logs read straight from Graylog, every value redacted with your rules, in three tabs:
+  - *Dashboard*: messages over time with their technical errors, messages and errors per application, the share
+    of each HTTP status class, and a sortable table per API: calls, business errors (status 4xx by default),
+    technical errors (5xx or the error query), % errors, p50/p95/p99 latency, slow calls from a threshold of
+    `slow_ms`, and the last call. Every number is counted by Graylog over the whole range. A click on a status
+    class, an application, an API or one of its counts narrows the query, a bar of the histogram the range;
+  - *By trace*: the newest traces with their duration, services, worst level and first API; one trace opens as a
+    timeline of its messages;
+  - *All logs*: the newest messages, 100 a page, each opening on its fields with the stack trace folded. Graylog
+    pages at most the newest 10,000: narrow the range or the query for older ones.
+
+  The bar on top picks the environment, query, streams and range (*last 1h* or from … to …). *Save view* keeps a
+  view in this browser's favourites, *Recent from the agent* reopens what the model searched, *Open in Graylog*
+  runs the same search there, and the auto refresh (off, 30 s, 1 or 5 minutes) pauses while the browser tab is
+  hidden or a row is open. These reads are recorded under Activity apart from the model's calls (*Playground
+  runs*), the refreshes not at all. The view is in the address (`/admin/logs/traces?instance=prod&q=…&trace=…`);
 - **Environments**: one card per group with its environments, default environment, repositories and their
   focus; descriptions and defaults save as you change them. The environment form tests the connection and saves
   in one click (*Save anyway* if Graylog cannot be reached), names the environment from the URL
@@ -564,7 +582,7 @@ Clients that do not start the server inside the repository (Claude Desktop) need
 An **environment picker** in the top bar carries one environment across Overview, Activity, Playground and Log fields.
 **Settings** (the gear, or <kbd>,</kbd>) picks the colour scheme (Slate, Midnight, Graphite, Catppuccin), light or dark, and density.
 Shortcuts: <kbd>/</kbd> search, <kbd>E</kbd> environment, <kbd>,</kbd> settings, <kbd>T</kbd> theme, <kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>
-switch tabs, <kbd>G</kbd> then <kbd>O</kbd>/<kbd>A</kbd>/<kbd>E</kbd>/<kbd>F</kbd>/<kbd>R</kbd>/<kbd>P</kbd>/<kbd>C</kbd> go to a screen.
+switch tabs, <kbd>G</kbd> then <kbd>O</kbd>/<kbd>A</kbd>/<kbd>L</kbd>/<kbd>E</kbd>/<kbd>F</kbd>/<kbd>R</kbd>/<kbd>P</kbd>/<kbd>C</kbd> go to a screen.
 
 Tool calls are recorded by the MCP server (stdio or shared) in `~/.config/graylog-mcp/usage/`, one file per
 process and day: tool, environment, duration, number of results, size, the query or id asked for, the conversation
@@ -586,9 +604,18 @@ the OS until you pick one (the **Follow OS theme** checkbox goes back to it), wi
 
 The UI listens on loopback only, checks the Host header, and every API call needs the random token in the
 link printed at startup. The browser keeps that token once the link is opened, so the page's other addresses
-carry no token; a browser without it is told how to sign in. It writes the config file and client configs when you ask. A token or password
+carry no token; a browser without it is told how to sign in. Since the browser keeps the token per address,
+`graylog-mcp ui` keeps its port (8765, or `--port`): run again, it opens the page already running there, and a
+port held by another program is an error instead of a move to the next one. It writes the config file and client configs when you ask. A token or password
 entered in the form is saved, when you tick "Save it on this machine", to the same per-user secrets file as
 `graylog-mcp login`, never to the config file.
+
+While an admin page runs on the machine (`graylog-mcp ui`, or the shared server's `/admin/`), `search_logs`,
+`trace_request` and `root_cause` add `ui` to their result: a link to the same view on the Logs screen, with the
+environment, the redacted query and the absolute range, never the token. The model is told to hand it to you as
+it is. A trace id that redaction would change is left out (the page could not look it up), and an environment the
+page's config does not have is reported there, not replaced by another. The query stays in the local browser's
+history like any address. `ui_links = "off"` at the top of the config file turns the links off.
 
 `*_env` settings hold the **name** of a variable (`GRAYLOG_PROD_TOKEN`), never the secret: a value that is not
 a valid variable name is refused, and never echoed back, since it is most likely a secret typed into the wrong
@@ -889,6 +916,9 @@ src/graylog_mcp/
   toolspecs/    the tools a model sees, each declared once: its arguments and the operations it runs
   server.py     model instructions, and the MCP tools built from those declarations
   usage*.py     the recorded tool calls: their store, its three tiers, and conversations and turns
+  explorer*.py  the admin page's Logs screen: per-API counts, traces and messages read from Graylog
+  ui_links.py   where a running admin page listens, and the `ui` links to it in tool results
+  admin/        the admin UI: a JSON API (app.py) and one page with its scripts (static/)
 ```
 
 ## License
