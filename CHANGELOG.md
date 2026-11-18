@@ -39,6 +39,8 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 - Redaction now masks a secret after a field name ending in a wildcard (`password*:value`), as in a query a suggested
   fix rewrote.
+- A metric over no values, which Graylog 5.2 and later return as the text `NaN` or `-Infinity`, now reads as no
+  value instead of a number, for example in root cause analysis's latency of a minute with no latency field.
 
 ## [0.4.0] - 2026-11-17
 

@@ -202,3 +202,36 @@ async def test_root_cause_on_incident(app, recorder):
     for req in recorder.requests:
         path = urlparse(str(req.url)).path.removeprefix("/api/")
         assert req.method == "GET" or path in READ_ONLY_POSTS, (req.method, path)
+
+
+async def test_explorer_aggregations(app):
+    """Percentiles, groups ordered by their newest message, two-field groups and a slow-call count (seed.py)."""
+    from datetime import UTC, datetime, timedelta
+
+    from graylog_mcp.backends.base import COUNT, Metric
+    from graylog_mcp.timerange import TimeRange
+
+    now = datetime.now(UTC)
+    window = TimeRange(now - timedelta(days=40), now + timedelta(minutes=1), "40d")
+    gl = app.gl(None)
+    pct = [Metric("percentile", "took_ms", p) for p in (50, 95, 99)]
+    rows = {r.keys[0]: r.values for r in (await gl.aggregate("*", window, (), ["service"], 20, [COUNT, *pct])).rows}
+    gateway = rows["gateway"]
+    assert gateway["count()"] == 2522 and gateway["percentile(took_ms,50)"] == 350, gateway
+    assert gateway["percentile(took_ms,95)"] == gateway["percentile(took_ms,99)"] == 2070, gateway
+    assert rows["notify"]["percentile(took_ms,50)"] is None  # no took_ms: Graylog answers "NaN"
+
+    newest = Metric("max", "timestamp", sort="desc")
+    traces = await gl.aggregate("*", window, (), ["trace_id"], 3, [COUNT, newest])
+    # 5.x+ add the messages without a trace_id as one more group, last whatever the order asked for
+    found = [r for r in traces.rows if r.keys[0] is not None]
+    assert len(found) == 3 and found[0].keys[0] == "req-7f3a9c", traces.rows
+    stamps = [r.values["max(timestamp)"] for r in found]
+    assert stamps == sorted(stamps, reverse=True), stamps
+
+    pairs = await gl.aggregate("*", window, (), ["service", "level"], 10, [COUNT])
+    counts = {(r.keys[0], str(r.keys[1])): r.values["count()"] for r in pairs.rows}
+    assert counts[("gateway", "6")] == 2450 and counts[("gateway", "3")] == 72, counts
+
+    slow = await gl.aggregate("took_ms:>=1000", window, (), ["service"], 20, [COUNT])
+    assert {r.keys[0]: r.values["count()"] for r in slow.rows} == {"gateway": 72, "payment": 72}
