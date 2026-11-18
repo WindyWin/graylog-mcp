@@ -1,13 +1,19 @@
 """Usage records as JSON lines: one file per process and UTC day, so two writers never share a file.
 
-    usage/live/<day>/<pid>-<start>.jsonl   what one process recorded that day
-    usage/days/<day>.jsonl                 a day imported from the old usage.jsonl
+    usage/live/<day>/<pid>-<start>.jsonl   what one process recorded that day (hot)
+    usage/days/<day>.jsonl                 a past day, one line per call, without previews and requests (warm), or
+                                           a day imported from the old usage.jsonl
+    usage/sessions.jsonl                   one line per conversation whose days are gone (cold)
     usage/hooks/<day>.jsonl                what the Claude Code hook saw (setup.claude_trace), joined when read
     usage/compact.lock                     held by the one process doing housekeeping
+    usage/compact.last                     its modification time is when housekeeping last ended
 
 A call is written twice, ``{"event": "started", "call_id": ...}`` before it runs and ``{"event": "finished", ...}``
-after, and read back as one record. A call that never finished is ``running`` while its process lives, else
-``interrupted``.
+after, both with the time it started, so both go to the file of the same day. They are read back as one record. A
+call that never finished is ``running`` while its process lives, else ``interrupted``.
+
+Housekeeping only rewrites the files of past days, which no process writes to any more, and only deletes a file it
+has read whole, so a line written while it runs is kept for the next run.
 """
 
 from __future__ import annotations
@@ -15,24 +21,36 @@ from __future__ import annotations
 import bisect
 import contextlib
 import json
+import logging
 import os
+import re
 import threading
 import time
-from collections.abc import Callable, Iterator
-from datetime import UTC, datetime
+from collections.abc import Callable, Iterable, Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from graylog_mcp.usage_compaction import Limits, fold, limits, warm
 from graylog_mcp.usage_store import enabled
+
+log = logging.getLogger(__name__)
 
 DETAIL = ("preview", "spans")
 DAY_SECONDS = 86400
 LOCK_STALE_SECONDS = 600  # a lock older than this was left by a process that died while holding it
 RETRY_SECONDS = 60  # after a failed write (read-only folder, full disk), how long before trying again
+SESSIONS = "sessions.jsonl"
+LAST_RUN = "compact.last"
+_DAY_NAME = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 def _day(ts: float) -> str:
     return datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d")
+
+
+def _day_before(day: str) -> str:
+    return (datetime.strptime(day, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
 
 
 class JsonlStore:
@@ -81,7 +99,9 @@ class JsonlStore:
         if not enabled():
             return []
         if self._legacy_waiting():
-            self.compact(time.time())
+            with self._exclusive() as held, contextlib.suppress(OSError):
+                if held:
+                    self._import_legacy()
         first, last = _day(since), _day(until) if until is not None else None
         rows: list[tuple[dict[str, Any], int | None]] = []
         for path, pid in self._files():
@@ -133,25 +153,147 @@ class JsonlStore:
     def calls_of(self, conversation: str, since: float, until: float) -> list[dict[str, Any]]:
         return [e for e in self.read(since, until, detail=True) if e.get("conversation") == conversation]
 
+    def sessions(self, since: float) -> list[dict[str, Any]]:
+        if not enabled():
+            return []
+        rows = [
+            {k: v for k, v in row.items() if k != "days"} for row in _lines(self.root / SESSIONS)
+            if isinstance(row.get("last_ts"), (int, float)) and row["last_ts"] >= since
+        ]  # fmt: skip
+        return sorted(rows, key=lambda r: r["last_ts"])
+
     def _files(self) -> Iterator[tuple[Path, int | None]]:
-        """Every record file, with the pid that wrote it (None for an imported day)."""
-        with contextlib.suppress(OSError):
-            for path in sorted((self.root / "days").glob("*.jsonl")):
-                yield path, None
+        """Every record file, with the pid that wrote it (None for a past day)."""
+        for path in self._day_files():
+            yield path, None
         with contextlib.suppress(OSError):
             for path in sorted((self.root / "live").glob("*/*.jsonl")):
-                pid = path.stem.split("-", 1)[0]
-                yield path, int(pid) if pid.isdigit() else 0
+                yield path, _pid_of(path)
+
+    def _day_files(self) -> list[Path]:
+        with contextlib.suppress(OSError):
+            return sorted((self.root / "days").glob("*.jsonl"))
+        return []
+
+    def _live_days(self) -> list[str]:
+        with contextlib.suppress(OSError):
+            return sorted(p.name for p in (self.root / "live").iterdir() if p.is_dir() and _DAY_NAME.fullmatch(p.name))
+        return []
 
     # ------------------------------------------------------------------ housekeeping
 
-    def compact(self, now: float) -> None:
+    def compact(self, now: float, every: float = 0) -> None:
         if not enabled():
             return
-        with self._exclusive() as held:
-            if held:
+        last = self.root / LAST_RUN
+        with contextlib.suppress(OSError):
+            if every and now - last.stat().st_mtime < every:
+                return
+        try:
+            with self._exclusive() as held:
+                if not held:
+                    return
                 with contextlib.suppress(OSError):
                     self._import_legacy()
+                self._housekeep(now, limits())
+                last.touch()
+                os.utime(last, (now, now))
+        except Exception:  # housekeeping must not break the server that runs it
+            log.warning("usage housekeeping in %s failed", self.root, exc_info=True)
+
+    def _housekeep(self, now: float, lim: Limits) -> None:
+        for leftover in self.root.rglob("*.tmp"):  # from a run that stopped half way: this one holds the lock
+            leftover.unlink()
+        first_hot = _day(now - (lim.hot_days - 1) * DAY_SECONDS)
+        for day in self._live_days():
+            if day < first_hot:
+                self._warm(day)
+        # a call's hook can be written the day before it: keep a day of hooks before the first live day
+        hooks_needed = _day_before(first_hot)
+        with contextlib.suppress(OSError):
+            for path in (self.root / "hooks").glob("*.jsonl"):
+                if path.stem < hooks_needed:
+                    path.unlink()
+
+        sessions = self._load_sessions()
+        before = json.dumps(sessions, sort_keys=True)
+        first_warm = _day(now - (lim.days - 1) * DAY_SECONDS)
+        cold = [path for path in self._day_files() if path.stem < first_warm]
+        for path in cold:
+            fold(sessions, path.stem, list(_lines(path)))
+        expired = now - lim.session_days * DAY_SECONDS
+        sessions = {c: row for c, row in sessions.items() if row["last_ts"] >= expired}
+        if json.dumps(sessions, sort_keys=True) != before:
+            self._save_sessions(sessions)
+        for path in cold:  # only once the sessions that count them are written
+            path.unlink()
+        self._shrink(_day(now), lim, sessions)
+
+    def _shrink(self, today: str, lim: Limits, sessions: dict[str, dict[str, Any]]) -> None:
+        """Delete the oldest data until the folder is under its limit: past days (counted into ``sessions``
+        first), then the oldest conversations, then the detail of the days before today, never today's calls."""
+
+        def over() -> int:
+            return self._size() - lim.max_bytes
+
+        for early in (False, True):
+            if early and over() > 0:
+                for day in self._live_days():
+                    if day < today:
+                        self._warm(day)
+            for path in self._day_files():
+                if over() <= 0:
+                    return
+                fold(sessions, path.stem, list(_lines(path)))
+                self._save_sessions(sessions)
+                path.unlink()
+            excess = over()
+            if excess > 0 and sessions:
+                for conversation in sorted(sessions, key=lambda c: sessions[c]["last_ts"]):
+                    excess -= len(_line(sessions.pop(conversation)).encode("utf-8"))
+                    if excess <= 0:
+                        break
+                self._save_sessions(sessions)
+
+    def _warm(self, day: str) -> None:
+        """Turn the live files of a past day into ``days/<day>.jsonl``: one line per call, its hook joined, its
+        preview and requests summed up."""
+        folder, target = self.root / "live" / day, self.root / "days" / f"{day}.jsonl"
+        read = [(path, path.stat().st_size) for path in sorted(folder.glob("*.jsonl"))]
+        rows: list[tuple[dict[str, Any], int | None]] = [(row, None) for row in _lines(target)]
+        for path, _ in read:
+            rows.extend((row, _pid_of(path)) for row in _lines(path))
+        calls = [warm(call) for call in _join(rows) if isinstance(call.get("ts"), (int, float))]
+        calls.sort(key=lambda c: c["ts"])
+        self._attach_hooks(calls, _day_before(day), day)
+        _replace(target, calls)
+        for path, size in read:
+            if path.stat().st_size == size:  # else a line came in since it was read: the next run merges it
+                path.unlink()
+        with contextlib.suppress(OSError):
+            folder.rmdir()
+
+    def _load_sessions(self) -> dict[str, dict[str, Any]]:
+        return {
+            str(row["conversation"]): row for row in _lines(self.root / SESSIONS)
+            if row.get("conversation") and isinstance(row.get("last_ts"), (int, float))
+        }  # fmt: skip
+
+    def _save_sessions(self, sessions: dict[str, dict[str, Any]]) -> None:
+        path = self.root / SESSIONS
+        if sessions:
+            _replace(path, sorted(sessions.values(), key=lambda r: r["last_ts"]))
+        else:
+            path.unlink(missing_ok=True)
+
+    def _size(self) -> int:
+        total = 0
+        with contextlib.suppress(OSError):
+            for path in self.root.rglob("*"):
+                with contextlib.suppress(OSError):
+                    if path.is_file():
+                        total += path.stat().st_size
+        return total
 
     @contextlib.contextmanager
     def _exclusive(self) -> Iterator[bool]:
@@ -212,6 +354,24 @@ class JsonlStore:
             os.replace(importing, imported)
 
 
+def _pid_of(path: Path) -> int:
+    pid = path.stem.split("-", 1)[0]
+    return int(pid) if pid.isdigit() else 0
+
+
+def _line(row: dict[str, Any]) -> str:
+    return json.dumps(row, ensure_ascii=False, default=str) + "\n"
+
+
+def _replace(path: Path, rows: Iterable[dict[str, Any]]) -> None:
+    """Write ``path`` whole or not at all: a reader never sees half of it."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        fh.writelines(_line(row) for row in rows)
+    os.replace(tmp, path)
+
+
 def _lines(path: Path) -> Iterator[dict[str, Any]]:
     try:
         raw = path.read_text(encoding="utf-8", errors="replace")
@@ -225,7 +385,9 @@ def _lines(path: Path) -> Iterator[dict[str, Any]]:
 
 
 def _join(rows: list[tuple[dict[str, Any], int | None]]) -> list[dict[str, Any]]:
-    """One record per call: a ``started`` line completed by its ``finished`` line."""
+    """One record per call: a ``started`` line completed by its ``finished`` line. A line of a past day (no
+    ``event``) is a whole call; one of its lines read again, or written after the day was compacted, completes it
+    rather than adding a call."""
     from graylog_mcp.setup.service import pid_alive
 
     out: list[dict[str, Any]] = []
@@ -233,15 +395,15 @@ def _join(rows: list[tuple[dict[str, Any], int | None]]) -> list[dict[str, Any]]
     finished: set[Any] = set()
     for row, pid in rows:
         event = row.pop("event", None)
-        if event is None:
+        key = row.get("call_id")
+        if event is None and key is None:  # recorded by an earlier version
             out.append(row)
             continue
-        key = row.get("call_id")
         if key not in calls:
             calls[key] = ({}, pid)
             out.append(calls[key][0])
         call = calls[key][0]
-        if event == "finished":
+        if event in ("finished", None):
             call.update(row)
             finished.add(key)
         else:

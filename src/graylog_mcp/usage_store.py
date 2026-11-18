@@ -1,8 +1,11 @@
 """Where usage records live: one small interface, so another backend can replace the JSONL files.
 
 Records are plain dicts with a ``ts`` (epoch seconds). The server writes them, the admin page reads them; neither
-knows how they are kept. ``GRAYLOG_MCP_USAGE=off`` turns recording off; ``calls`` records the calls and their
-requests but not the previews of their results.
+knows how they are kept. Kept in three tiers: every detail for the last days, each call without its preview and
+requests (a ``span_summary`` instead) for two weeks, then one line per conversation (``usage_compaction``).
+
+``GRAYLOG_MCP_USAGE=off`` turns recording off; ``calls`` records the calls and their requests but not the previews
+of their results.
 """
 
 from __future__ import annotations
@@ -59,8 +62,14 @@ class UsageStore(Protocol):
     def calls_of(self, conversation: str, since: float, until: float) -> list[dict[str, Any]]:
         """The entries of one conversation, with detail."""
 
-    def compact(self, now: float) -> None:
-        """Housekeeping: import the old usage file. Only one process does it at a time."""
+    def sessions(self, since: float) -> list[dict[str, Any]]:
+        """What is left of the conversations whose calls were dropped (``usage_compaction.fold``) that were still
+        active at ``since`` or later, oldest first."""
+
+    def compact(self, now: float, every: float = 0) -> None:
+        """Housekeeping: import the old usage file, then keep the store within its limits
+        (``usage_compaction.limits``). Only one process does it at a time; skipped when the previous run, by any
+        process, ended less than ``every`` seconds ago. Never raises."""
 
 
 _stores: dict[Path, UsageStore] = {}

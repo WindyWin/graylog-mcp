@@ -559,6 +559,10 @@ process and day: tool, environment, duration, number of results, size, the query
 it belongs to, the Graylog requests it sent and the first 2,000 characters of its result, all **redacted with your
 redaction rules before they are written**. It stays on your machine. In the server's environment,
 `GRAYLOG_MCP_USAGE=calls` keeps the calls without their results and `GRAYLOG_MCP_USAGE=off` turns recording off.
+The server tidies the folder in the background: everything is kept for today and yesterday, each call without its
+result and requests (a summary of them instead) up to 15 days, then one line per conversation up to 90 days, and
+the folder stays under 50 MB, the oldest dropped first. `GRAYLOG_MCP_USAGE_HOT_DAYS`, `GRAYLOG_MCP_USAGE_DAYS`
+(15 at the least), `GRAYLOG_MCP_USAGE_SESSION_DAYS` and `GRAYLOG_MCP_USAGE_MAX_MB` change those numbers.
 
 <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> jumps to any page, environment, tool or action; unsaved changes show a
 save bar (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd>) and are not lost by leaving the page. Light or dark follows

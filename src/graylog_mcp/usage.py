@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import re
 import statistics
+import threading
 import time
 from collections import defaultdict
 from collections.abc import Callable
@@ -18,13 +19,18 @@ from typing import Any
 from graylog_mcp.client import SpanLog
 from graylog_mcp.operations import search_names
 from graylog_mcp.redact import Redactor
-from graylog_mcp.usage_store import enabled, previews, store
+from graylog_mcp.usage_store import UsageStore, enabled, previews, store
 
 # arguments worth seeing again (redacted): what was searched for
 ARG_KEYS = ("query", "trace_id", "field", "ref", "group_by", "contains")
 # what shaped the result, kept apart from "args": the admin page replays those as a tool call
 PARAM_KEYS = ("range", "from_time", "to_time", "fields", "limit", "offset")
 PREVIEW_CHARS = 2000
+COMPACT_EVERY = 200  # records written by this process between two housekeeping runs
+COMPACT_INTERVAL_SECONDS = 600
+
+_writes = 0
+_compacting = threading.Lock()
 
 
 def results_of(result: Any) -> int | None:
@@ -154,7 +160,29 @@ def track(
 
 
 def write(entry: dict[str, Any]) -> None:
+    global _writes
     store().append(entry)
+    _writes += 1
+    if _writes % COMPACT_EVERY == 0:
+        start_compaction()
+
+
+def start_compaction() -> None:
+    """Keep the usage store within its limits, in a background thread: a run reads and rewrites files, which must
+    not hold up a tool call. Skipped when one runs in this process, or ran in any process in the last 10 minutes."""
+    if not enabled() or not _compacting.acquire(blocking=False):
+        return
+
+    def run(target: UsageStore) -> None:
+        try:
+            target.compact(time.time(), every=COMPACT_INTERVAL_SECONDS)
+        finally:
+            _compacting.release()
+
+    try:
+        threading.Thread(target=run, args=(store(),), name="graylog-mcp-usage-compaction", daemon=True).start()
+    except Exception:  # recording must not break the server
+        _compacting.release()
 
 
 def read(since: float) -> list[dict[str, Any]]:

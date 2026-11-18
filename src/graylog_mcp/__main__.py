@@ -337,6 +337,9 @@ def _serve(argv: list[str]) -> int:
         if args.check:
             assert config is not None
             return asyncio.run(_check(config))
+        from graylog_mcp import usage
+
+        usage.start_compaction()
         if args.transport == "stdio":
             assert config is not None
             from graylog_mcp.server import build_server, create_app

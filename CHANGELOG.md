@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 - Usage records move from the single `usage.jsonl` to `usage/`, one file per process and day, so servers no longer
   share a file. The old file is imported on first use.
+- Usage records are no longer trimmed at 4 MB but kept in tiers, tidied in a background thread: every detail for
+  today and yesterday, each call without its result and requests (a summary of them) up to 15 days, one line per
+  conversation up to 90 days, the folder under 50 MB. `GRAYLOG_MCP_USAGE_HOT_DAYS`, `GRAYLOG_MCP_USAGE_DAYS`,
+  `GRAYLOG_MCP_USAGE_SESSION_DAYS` and `GRAYLOG_MCP_USAGE_MAX_MB` change the limits.
 
 ### Fixed
 - Redaction now masks a secret after a field name ending in a wildcard (`password*:value`), as in a query a suggested
