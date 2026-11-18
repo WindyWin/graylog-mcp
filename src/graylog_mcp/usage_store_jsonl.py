@@ -43,10 +43,12 @@ RETRY_SECONDS = 60  # after a failed write (read-only folder, full disk), how lo
 SESSIONS = "sessions.jsonl"
 LAST_RUN = "compact.last"
 _DAY_NAME = re.compile(r"\d{4}-\d{2}-\d{2}")
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def _day(ts: float) -> str:
-    return datetime.fromtimestamp(ts, UTC).strftime("%Y-%m-%d")
+    # not datetime.fromtimestamp: on Windows it raises OSError for a time before 1970, and read(0, ...) asks for one
+    return (_EPOCH + timedelta(seconds=ts)).strftime("%Y-%m-%d")
 
 
 def _day_before(day: str) -> str:
