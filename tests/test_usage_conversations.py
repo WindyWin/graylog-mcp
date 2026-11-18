@@ -113,7 +113,7 @@ def test_a_compacted_conversation_is_listed_as_cold():
     s.compact(NOW)
     (row,) = conversations.conversations(2160, now=NOW)["turns"]
     assert row["tier"] == "cold" and row["calls"] == 1 and row["turn"] is None and row["tools"] == ["search_logs"]
-    assert conversations.turn_detail(A, now=NOW) == {"conversation": A, "turns": [], "cold": row}
+    assert conversations.turn_detail(A, now=NOW) == {"conversation": A, "turns": [], "cold": row, "detail_days": 15}
 
 
 # ----------------------------------------------------------------------------- admin
@@ -136,6 +136,22 @@ async def test_admin_lists_and_opens_conversations(admin):
         assert (await admin.get("/api/conversations?range=1y")).status_code == 400
         assert (await admin.get("/api/usage?source=other")).status_code == 400
         assert (await admin.get("/api/usage?source=all")).json()["totals"]["calls"] == 2
+
+
+async def test_every_view_of_the_page_has_its_own_address(admin):
+    async with admin:
+        for path in ("/", "/activity", "/activity/conversations/aaaaaaaaaaaa?turn=1", "/activity/calls?tool=x"):
+            page = await admin.get(path, headers={"X-Admin-Token": ""})  # the page itself needs no token
+            assert page.status_code == 200 and '<meta name="graylog-mcp-root" content="">' in page.text, path
+            assert '<script src="/static/activity.js">' in page.text and "__GRAYLOG_MCP_ROOT__" not in page.text
+        script = await admin.get("/static/activity.js")
+        assert script.status_code == 200 and script.headers["content-type"].startswith("text/javascript")
+        assert (await admin.get("/static/index.html")).status_code == 404  # only the files listed
+        assert (await admin.get("/static/..%2Fapp.py")).status_code == 404
+        beside = (await admin.get("/static/../app.py")).text  # the page, never a file next to it
+        assert beside.startswith("<!doctype html>") and "def build_app" not in beside
+        missing = await admin.get("/api/no-such-thing")
+        assert missing.status_code == 404 and missing.json() == {"error": "not found"}  # an API is not the page
 
 
 async def test_an_export_is_the_redacted_conversation_as_a_file(admin):

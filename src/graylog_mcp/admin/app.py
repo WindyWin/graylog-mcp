@@ -259,6 +259,12 @@ def _groups_view(config: Config | None, base_dir: Path, url: str | None = None) 
     ]
 
 
+# where the page is served: "" for 'graylog-mcp ui', "/admin" under the shared server (__main__.with_admin). The page
+# reads it from a <meta> rather than a <base>, which the CSP forbids.
+ROOT_KEY = "graylog_mcp.admin_root"
+ROOT_MARK = "__GRAYLOG_MCP_ROOT__"
+STATIC_FILES = {"activity.js": "text/javascript; charset=utf-8"}
+
 # index.html carries its own inline script and style, so the CSP must allow 'unsafe-inline' for them;
 # it still blocks framing, foreign hosts and <base>/form hijacking. Tighten with a nonce if the page is split.
 _SECURITY_HEADERS = [
@@ -275,10 +281,25 @@ _SECURITY_HEADERS = [
 
 
 def build_app(state: AdminState) -> Starlette:
-    static = resources.files("graylog_mcp.admin").joinpath("static/index.html")
+    static = resources.files("graylog_mcp.admin").joinpath("static")
 
-    async def index(_request: Request) -> Response:
-        return HTMLResponse(static.read_text(encoding="utf-8"), headers={"Cache-Control": "no-store"})
+    async def index(request: Request) -> Response:
+        """The page, for every path that is not an API or a file: the page routes by path, so a link to one of its
+        views opens that view."""
+        if request.url.path.startswith(("/api/", "/static/")):
+            return _err("not found", 404)
+        root = request.scope.get(ROOT_KEY, "")
+        page = static.joinpath("index.html").read_text(encoding="utf-8").replace(ROOT_MARK, root)
+        return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+
+    async def static_file(request: Request) -> Response:
+        name = request.path_params["name"]
+        if name not in STATIC_FILES:
+            return _err("not found", 404)
+        return Response(
+            static.joinpath(name).read_text(encoding="utf-8"), media_type=STATIC_FILES[name],
+            headers={"Cache-Control": "no-store"},
+        )  # fmt: skip
 
     async def get_state(_request: Request) -> Response:
         error = None
@@ -905,6 +926,7 @@ def build_app(state: AdminState) -> Starlette:
 
     routes = [
         Route("/", index),
+        Route("/static/{name}", static_file),
         Route("/api/state", get_state),
         Route("/api/test", test_instance, methods=["POST"]),
         Route("/api/instances", save_instance, methods=["POST"]),
@@ -942,6 +964,7 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/setup/update", setup_update, methods=["POST"]),
         Route("/api/clients", client_snippets),
         Route("/api/clients/install", install_client, methods=["POST"]),
+        Route("/{path:path}", index),  # last: what no route above takes
     ]
     inner = Starlette(routes=routes)
 

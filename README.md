@@ -265,9 +265,8 @@ Writing rules that are fast and accurate:
    clause really has in the range with the close ones (`service:paymnt` -> did you mean `payment`; numbers are
    never guessed), and the dead clauses that match on their own further back.
 
-Learned fixes live in `~/.config/graylog-mcp/learned.json`, per instance; the admin page (Activity > What
-graylog-mcp learned) shows each one with its counts, weight and whether it applies by itself, and forgets one on
-request. `GRAYLOG_MCP_LEARN=off` stops learning and applying learned fixes; the deterministic fixes stay.
+Learned fixes live in `~/.config/graylog-mcp/learned.json`, per instance; the admin page (Activity > Learned) shows
+each one with its counts, weight and whether it applies by itself, and forgets one on request. `GRAYLOG_MCP_LEARN=off` stops learning and applying learned fixes; the deterministic fixes stay.
 
 ## Ask in plain language
 
@@ -532,9 +531,19 @@ Clients that do not start the server inside the repository (Claude Desktop) need
   7 days (read from Graylog when the page opens, nothing stored), every environment's health with a sparkline or
   its problem and a button to fix it (*Add token*, *Fix*), the tools the model used, and the searches that found
   nothing;
-- **Activity**: every tool call the model made, per hour: found something / found nothing / error, per-tool
-  counts and latency (median, p95), and the recent calls with what was asked; *Re-run* opens one in the
-  Playground;
+- **Activity**, in four tabs:
+  - *Dashboard*: calls per hour (found something / found nothing / error), calls per environment and a table
+    per tool (calls, errors, latency median and p95, slow calls, results cut to the size budget);
+  - *Conversations*: each turn of each conversation, newest first. Opening one shows its calls grouped by agent,
+    the Graylog requests each sent (waiting, retries, status) and its redacted result preview, refreshed while a
+    call is running. Older conversations keep a summary only. *Download JSON* exports the turn;
+  - *Calls*: the recent calls with what was asked and their status (running, cancelled, refused, error);
+    *Re-run* opens one in the Playground;
+  - *Learned*: the fixes graylog-mcp learned (below).
+
+  *Playground runs* counts the Playground's own calls too. Every view has its own address
+  (`/admin/activity/conversations/<id>?turn=<ms>`), so a link to a turn or call can be bookmarked or shared
+  with someone who has the page's token;
 - **Environments**: one card per group with its environments, default environment, repositories and their
   focus; descriptions and defaults save as you change them. The environment form tests the connection and saves
   in one click (*Save anyway* if Graylog cannot be reached), names the environment from the URL

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="graylog-mcp-root" content="__GRAYLOG_MCP_ROOT__">
 <title>graylog-mcp admin</title>
 <meta name="description" content="Local admin page for graylog-mcp: environment health, what the model asked, log fields and redaction.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23171717'/%3E%3Cpath d='M7 21l6-7 4 4 8-10' stroke='%23fdfdfb' stroke-width='3.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
@@ -587,7 +588,8 @@ dialog.wide .pane[hidden] { display: none; }
 .sel { min-height: var(--control-sm); max-width: 12rem; font: 13px var(--font-mono); }
 .cmeta { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; padding: var(--space-xs) 0 var(--space-2xs); font: 12px var(--font-mono); color: var(--color-muted); }
 .cmeta .spacer { flex: 1; }
-.chdr, .chead { display: grid; grid-template-columns: 5.6rem 8.5rem 8.5rem minmax(0, 1fr) 8.5rem 4.5rem 3.5rem; gap: 12px; align-items: center; }
+.chdr, .chead { display: grid; grid-template-columns: 5.6rem 8.5rem 8.5rem 6.5rem minmax(0, 1fr) 8.5rem 4.5rem 3.5rem; gap: 12px; align-items: center; }
+.chead .cconv { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-2); }
 .chdr { padding: 6px 0; border-bottom: var(--rule-hair) solid var(--color-rule); font: 500 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--color-muted); }
 .chdr span:nth-last-child(-n+2) { text-align: right; }
 .crow { display: grid; grid-template-rows: 1fr; border-bottom: var(--rule-hair) solid var(--color-rule); transition: grid-template-rows var(--dur-long) var(--ease-out), opacity var(--dur-short) var(--ease-out); }
@@ -638,6 +640,57 @@ pre.json { margin: 0; padding: 10px 12px; border: var(--rule-hair) solid var(--c
 .wbar .track i { display: block; height: 100%; background: var(--chart-ink); }
 .lwrap { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--dur-long) var(--ease-out), opacity var(--dur-short) var(--ease-out); }
 .lwrap.gone { grid-template-rows: 0fr; opacity: 0; }
+/* activity: dashboard */
+.donut { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-lg); }
+.donut svg { flex: none; }
+.donut .dn { font: 600 20px var(--font-mono); fill: var(--color-ink); } .donut .dl { font: 11px var(--font-mono); fill: var(--color-muted); }
+.dlegend { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 6px 10px; align-items: center; margin: 0; padding: 0; list-style: none; font: 12.5px var(--font-mono); }
+.dlegend li { display: contents; }
+.dlegend i { width: 10px; height: 10px; border-radius: 3px; }
+.dlegend b { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.ttable th, .ttable td { font: 12.5px var(--font-mono); white-space: nowrap; }
+.ttable th.num, .ttable td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ttable td.bad { color: var(--color-error); font-weight: 600; } .ttable td.warn { color: var(--color-warn); font-weight: 600; }
+.sorth { min-height: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; white-space: nowrap; }
+.sorth:hover { color: var(--color-ink); }
+th[aria-sort="ascending"] .sorth, th[aria-sort="descending"] .sorth { color: var(--color-ink); font-weight: 600; }
+.linkbtn { min-height: 0; padding: 0; border: 0; background: none; color: var(--color-ink); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--color-rule); text-underline-offset: 3px; }
+.linkbtn:hover { text-decoration-color: currentColor; }
+/* activity: conversations */
+.convtable td { font-size: 12.5px; white-space: nowrap; } .convtable td.num, .convtable th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.convtable tr.go { cursor: pointer; } .convtable tr.go:hover td { background: var(--color-paper-2); }
+.convtable tr.go:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.cid { color: var(--color-ink-2); }
+.flags, .tchips { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.tchip { display: inline-grid; place-items: center; min-width: 22px; height: 20px; padding: 0 4px; border-radius: 5px; background: var(--color-paper-3); color: var(--color-ink-2); font: 600 10.5px var(--font-mono); text-decoration: none; text-transform: uppercase; }
+.dhead { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-md); }
+.dhead h2 { margin: 0; font-size: var(--text-md); }
+.tline { display: flex; flex-direction: column; }
+.tline .agent { margin: var(--space-sm) 0 2px; }
+.tcall { border-bottom: var(--rule-hair) solid var(--color-rule); }
+.tcall:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.tc-head { display: grid; grid-template-columns: 2rem 8.5rem minmax(0, 1fr) auto minmax(8rem, 1.2fr) 5rem; gap: 10px; align-items: center; min-height: var(--row-h); cursor: pointer; font: 12.5px var(--font-mono); }
+.tc-head:hover { background: var(--color-paper-2); }
+.tc-head .ctool { font-weight: 600; } .tc-head .cwhat { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink-2); }
+.tc-head .num { text-align: right; }
+.tbar, .wbar { position: relative; display: block; height: 10px; border-radius: 3px; background: var(--color-paper-3); }
+.tbar > span, .wbar > span { position: absolute; top: 0; bottom: 0; min-width: 2px; border-radius: 3px; background: var(--chart-ink); overflow: hidden; }
+.tbar > span.bad, .wbar > span.bad { background: var(--color-error); }
+.tbar > span.run { background: repeating-linear-gradient(-45deg, var(--chart-ink) 0 6px, var(--chart-mid) 6px 12px); background-size: 17px 17px; animation: running 1s linear infinite; }
+@keyframes running { to { background-position: 17px 0; } }
+.wbar > span > i { display: block; height: 100%; background: color-mix(in oklab, var(--color-paper) 55%, transparent); }
+.tc-det .dwrap { padding-left: 2rem; }
+.wfall { display: flex; flex-direction: column; gap: 4px; }
+.wrow { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(6rem, 1fr) 3rem auto; gap: 8px; align-items: center; font-size: 12px; }
+.wrow .bad { color: var(--color-error); }
+@media (prefers-reduced-motion: reduce) { .tbar > span.run { animation: none; } }
+@media (max-width: 40rem) {
+  .tc-head { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "tool st ms" "what what what" "bar bar bar"; row-gap: 4px; padding-block: 8px; }
+  .tc-head > :first-child { display: none; } .tc-head .ctool { grid-area: tool; } .tc-head .cwhat { grid-area: what; } .tc-head .cst { grid-area: st; }
+  .tc-head .tbar { grid-area: bar; } .tc-head .num { grid-area: ms; }
+  .tc-det .dwrap { padding-left: 0; }
+  .wrow { grid-template-columns: minmax(0, 1fr) auto auto; } .wrow .wbar { grid-column: 1 / -1; grid-row: 2; }
+}
 .lwrap > div { overflow: hidden; min-height: 0; }
 .chart .selband { fill: var(--color-accent-soft); }
 .chart .kbband { fill: none; stroke: var(--color-focus); stroke-width: 2; }
@@ -733,7 +786,7 @@ svg.chart:focus-visible { outline: 2px solid var(--color-focus); outline-offset:
   .table-wrap .acts th:last-child, .table-wrap .acts td:last-child { position: sticky; right: 0; background: var(--color-paper); }
 }
 @media (max-width: 60rem) {
-  .chdr, .chead { grid-template-columns: 5rem 7.5rem 7rem minmax(0, 1fr) 7.5rem 4rem 3rem; gap: 10px; }
+  .chdr, .chead { grid-template-columns: 5rem 7.5rem 7rem 5.5rem minmax(0, 1fr) 7.5rem 4rem 3rem; gap: 10px; }
   .dwrap { padding-left: 0; grid-template-columns: minmax(0, 1fr); }
   .trow.lrn { grid-template-columns: 7rem 6.5rem minmax(0, 1.4fr) 5rem 7rem 8rem 5rem; }
 }
@@ -742,9 +795,9 @@ svg.chart:focus-visible { outline: 2px solid var(--color-focus); outline-offset:
   .screen-head .tools { margin-left: 0; }
   .tabs { gap: var(--space-md); overflow-x: auto; }
   .chdr { display: none; }
-  .chead { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "tool tool st st" "what what what what" "ct env ms n"; row-gap: 4px; padding-block: 10px; }
+  .chead { grid-template-columns: minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tool tool tool st st" "what what what what what" "ct env conv ms n"; row-gap: 4px; padding-block: 10px; }
   .chead .ctool { grid-area: tool; } .chead .cst { grid-area: st; justify-content: flex-end; } .chead .cwhat { grid-area: what; white-space: normal; overflow-wrap: anywhere; }
-  .chead .ct { grid-area: ct; } .chead .cenv { grid-area: env; } .chead .cms { grid-area: ms; } .chead .cn { grid-area: n; }
+  .chead .ct { grid-area: ct; } .chead .cenv { grid-area: env; } .chead .cconv { grid-area: conv; } .chead .cms { grid-area: ms; } .chead .cn { grid-area: n; }
   .trow { grid-template-columns: minmax(0, 1fr) 3.6rem 3.6rem 3.6rem; row-gap: 4px; padding-block: 8px; }
   .trow.lrn.head { display: none; }
   .trow.head .num { white-space: normal; line-height: 1.2; font-size: 10px; }
@@ -851,20 +904,45 @@ svg.chart:focus-visible { outline: 2px solid var(--color-focus); outline-offset:
       <section class="page" id="activity" data-title="Activity" data-sub="Every tool call the model made: what it asked, what it found, how long it took">
         <div class="page-tools">
           <span class="ctxchip" id="actCtx" hidden><span id="actCtxText"></span><button type="button" id="actCtxClear" aria-label="Show every environment"><svg class="i" viewBox="0 0 24 24" aria-hidden="true" style="width:12px;height:12px"><path d="M6 6l12 12M18 6L6 18"/></svg></button></span>
-          <div class="seg" role="group" aria-label="Time range"><button data-range="24h" aria-pressed="true">24 hours</button><button data-range="7d" aria-pressed="false">7 days</button></div>
+          <label class="check small" title="The admin's own runs from the Playground, apart from the model's calls by default"><input type="checkbox" id="actPlay">Playground runs</label>
+          <div class="seg" role="group" aria-label="Time range" id="actRange"><button data-range="24h" aria-pressed="true">24 hours</button><button data-range="7d" aria-pressed="false">7 days</button></div>
           <button class="btn sm ghost" id="actRefresh"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Refresh</button>
         </div>
         <div id="usageOff"></div>
-        <section class="card" aria-labelledby="actChartTitle">
-          <div class="card-head"><h2 id="actChartTitle">Calls</h2><span class="muted small mono" id="callsSub"></span><span class="spacer"></span><span class="muted small">click a bar to filter the list</span></div>
-          <div id="callsChart"><div class="skeleton"></div></div>
-        </section>
         <div class="tabs" role="tablist" aria-label="Activity views" id="actTabs">
-          <button role="tab" id="tabBtn-calls" aria-controls="tab-calls" aria-selected="true" data-tab="calls">Calls<span class="n" id="nCalls"></span></button>
-          <button role="tab" id="tabBtn-tools" aria-controls="tab-tools" aria-selected="false" tabindex="-1" data-tab="tools">By tool<span class="n" id="nTools"></span></button>
+          <button role="tab" id="tabBtn-dashboard" aria-controls="tab-dashboard" aria-selected="true" data-tab="dashboard">Dashboard</button>
+          <button role="tab" id="tabBtn-conversations" aria-controls="tab-conversations" aria-selected="false" tabindex="-1" data-tab="conversations">Conversations<span class="n" id="nConvs"></span></button>
+          <button role="tab" id="tabBtn-calls" aria-controls="tab-calls" aria-selected="false" tabindex="-1" data-tab="calls">Calls<span class="n" id="nCalls"></span></button>
           <button role="tab" id="tabBtn-learned" aria-controls="tab-learned" aria-selected="false" tabindex="-1" data-tab="learned">Learned<span class="n" id="nLearned"></span></button>
         </div>
-        <div class="tabpanel" role="tabpanel" id="tab-calls" aria-labelledby="tabBtn-calls">
+        <div class="tabpanel" role="tabpanel" id="tab-dashboard" aria-labelledby="tabBtn-dashboard">
+          <section class="card" aria-labelledby="actChartTitle">
+            <div class="card-head"><h2 id="actChartTitle">Calls</h2><span class="muted small mono" id="callsSub"></span><span class="spacer"></span><span class="muted small">click a bar to list its calls</span></div>
+            <div id="callsChart"><div class="skeleton"></div></div>
+          </section>
+          <div class="dgrid even">
+            <section class="card" aria-labelledby="outcomeTitle"><div class="card-head"><h2 id="outcomeTitle">Outcome</h2><span class="muted small">every call in the range</span></div><div id="actDonut"></div></section>
+            <section class="card" aria-labelledby="envCallsTitle"><div class="card-head"><h2 id="envCallsTitle">Environments</h2><span class="muted small">calls per environment</span></div><div id="actEnvs"></div></section>
+          </div>
+          <section class="card" aria-labelledby="toolsTitle">
+            <div class="card-head"><h2 id="toolsTitle">Tools</h2><span class="muted small" id="toolsSub">click a column to sort, a tool to list its calls</span><span class="spacer"></span>
+              <label class="check small" for="slowMs">Slow from</label><select class="sel auto-width" id="slowMs" aria-label="Slow from"><option value="1000">1 s</option><option value="3000" selected>3 s</option><option value="10000">10 s</option></select></div>
+            <div id="toolTable"></div>
+          </section>
+        </div>
+        <div class="tabpanel" role="tabpanel" id="tab-conversations" aria-labelledby="tabBtn-conversations" hidden>
+          <div id="convList">
+            <div class="fbar">
+              <label class="search"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="cq" type="search" placeholder="Filter by repository, tool, query…" autocomplete="off" aria-label="Filter conversations"></label>
+              <select class="sel auto-width" id="crange" aria-label="Conversations from"><option value="24h">24 hours</option><option value="7d" selected>7 days</option><option value="30d">30 days</option><option value="90d">90 days</option></select>
+              <div class="seg" id="cstat" role="group" aria-label="Outcome"><button data-st="all" aria-pressed="true">All</button><button data-st="error" aria-pressed="false">Errors</button><button data-st="nothing" aria-pressed="false">Found nothing</button><button data-st="running" aria-pressed="false">Running</button></div>
+            </div>
+            <div class="cmeta"><span id="ccount" aria-live="polite"></span><span class="spacer"></span><span class="keyhint"><span class="kbd">J</span> <span class="kbd">K</span> move · <span class="kbd">Enter</span> open</span></div>
+            <div id="clist"></div>
+          </div>
+          <div id="convDetail" hidden></div>
+        </div>
+        <div class="tabpanel" role="tabpanel" id="tab-calls" aria-labelledby="tabBtn-calls" hidden>
           <div class="fbar">
             <label class="search"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><input id="aq" type="search" placeholder="Filter by query, trace id, field…" autocomplete="off" aria-label="Filter calls"></label>
             <select class="sel auto-width" id="atool" aria-label="Tool"></select>
@@ -873,11 +951,10 @@ svg.chart:focus-visible { outline: 2px solid var(--color-focus); outline-offset:
             <button class="btn sm ghost" id="aclear" hidden>Clear filters</button>
           </div>
           <div class="cmeta"><span id="acount" aria-live="polite"></span><span class="spacer"></span><span class="keyhint"><span class="kbd">J</span> <span class="kbd">K</span> move · <span class="kbd">Enter</span> open · <span class="kbd">P</span> Playground</span></div>
-          <div class="chdr" aria-hidden="true"><span>When</span><span>Tool</span><span>Environment</span><span>Asked for</span><span></span><span>Time</span><span>Found</span></div>
+          <div class="chdr" aria-hidden="true"><span>When</span><span>Tool</span><span>Environment</span><span>Conversation</span><span>Asked for</span><span>Status</span><span>Time</span><span>Found</span></div>
           <div id="alist" role="list" aria-label="Recent calls"></div>
           <div class="allclear" id="aempty" hidden></div>
         </div>
-        <div class="tabpanel" role="tabpanel" id="tab-tools" aria-labelledby="tabBtn-tools" hidden><div id="toolTable"></div></div>
         <div class="tabpanel" role="tabpanel" id="tab-learned" aria-labelledby="tabBtn-learned" hidden>
           <div class="cmeta"><span id="learnSub"></span></div>
           <div id="learnList"></div>
@@ -1160,13 +1237,20 @@ jdbc:postgresql://admin:s3cret@db:5432/orders</textarea>
   </div></div>
 <div id="toasts" aria-live="polite"></div>
 
+<script src="__GRAYLOG_MCP_ROOT__/static/activity.js"></script>
 <script>
 "use strict";
 // ------------------------------------------------------------------ basics
+// where the page is served: "" by 'graylog-mcp ui', "/admin" by the shared server; every link and API call starts with it
+const ROOT = ((document.querySelector('meta[name="graylog-mcp-root"]') || {}).content || "").replace(/^__.*__$/, "").replace(/\/$/, "");
+// the admin token comes once in the link the CLI opens (#token=), then stays in this browser for this address
 const params = new URLSearchParams(location.hash.slice(1));
 let TOKEN = params.get("token") || "";
-try { TOKEN = TOKEN || sessionStorage.getItem("gm-token") || ""; if (params.get("token")) sessionStorage.setItem("gm-token", TOKEN); } catch (e) { /* storage blocked */ }
-if (params.get("token")) history.replaceState(null, "", location.pathname);
+try {
+  TOKEN = TOKEN || localStorage.getItem("gm-token") || sessionStorage.getItem("gm-token") || "";  // sessionStorage: earlier versions
+  if (TOKEN) localStorage.setItem("gm-token", TOKEN);
+} catch (e) { /* storage blocked: the token lasts as long as the page */ }
+if (params.get("token")) history.replaceState(null, "", location.pathname + location.search);  // the link keeps its path, loses the token
 const LOAD_ERR = {usage: "", doctor: ""};  // why a load failed, so a screen can say so instead of waiting for ever
 let STATE = null, CHECKS = null, SETUP = null, SCOPES = [{scope: "global", label: "All environments (global defaults)"}];
 const $ = (id) => document.getElementById(id);
@@ -1204,12 +1288,17 @@ function toast(msg, kind = "ok") {
   $("toasts").appendChild(el);
   setTimeout(() => el.remove(), kind === "fail" ? 7000 : 3500);
 }
-// served at / by 'graylog-mcp ui', or at /admin/ by the shared server ('graylog-mcp start')
-const BASE = location.pathname.replace(/\/[^/]*$/, "");
+const BASE = ROOT;
+// no token or a wrong one: the address stays as it is, so reloading after signing in opens the same view
+function signedOut() {
+  try { localStorage.removeItem("gm-token"); } catch (e) { /* storage blocked */ }
+  $("banner").innerHTML = `<div class="banner fail">${ICON.fail}<div class="text">This browser is not signed in to this page. Run <code>graylog-mcp ui</code> once (or <code>graylog-mcp start</code> for the shared server): it opens the page with its access token. Then reload this tab.</div></div>`;
+}
 async function api(path, method = "GET", body) {
   const res = await fetch(BASE + path, {method, headers: {"X-Admin-Token": TOKEN, "Content-Type": "application/json"}, body: body === undefined ? undefined : JSON.stringify(body)});
   let data = {};
   try { data = await res.json(); } catch (e) { data = {error: res.statusText}; }
+  if (res.status === 401) signedOut();
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
@@ -1341,12 +1430,38 @@ $("settingsBtn").addEventListener("click", (e) => openSettings(e.currentTarget))
 syncTheme();
 
 // ------------------------------------------------------------------ navigation
+// A view has its own address, ROOT/<page>[/<tab>[/<id>]]?<filters>, so a link or a reload opens it again. Changing page,
+// tab or filter adds to the history (typing a filter replaces the entry); Back and Forward render what the address says.
 const OLD_PAGES = {overview: "home", groups: "envs", settings: "fields", clients: "connect"};
 let CURRENT = "home";
-async function showPage(name) {
+function routeOf(loc = location) {
+  const rest = loc.pathname.startsWith(`${ROOT}/`) ? loc.pathname.slice(ROOT.length + 1) : "";
+  const [page = "", ...sub] = rest.split("/").filter(Boolean).map((s) => { try { return decodeURIComponent(s); } catch (e) { return s; } });
+  return {page: page || "home", sub, query: new URLSearchParams(loc.search)};
+}
+function pathOf(page, sub = [], query = null) {
+  const q = query ? query.toString() : "";
+  return `${ROOT}/${page === "home" ? "" : [page, ...sub].map(encodeURIComponent).join("/")}${q ? `?${q}` : ""}`;
+}
+// how: "push" adds a history entry, "replace" changes the current one, "none" leaves the address (it was the address that changed)
+function navigate(url, how = "push") {
+  if (how === "none" || url === location.pathname + location.search) return;
+  history[how === "replace" ? "replaceState" : "pushState"](null, "", url);
+}
+const pagePath = (name) => (name === "activity" ? activityPath() : pathOf(name));
+window.addEventListener("popstate", () => openRoute("none"));
+async function openRoute(how) {
+  const r = routeOf();
+  if (r.page === "activity") applyActivityRoute(r);
+  await showPage(r.page, how);
+}
+async function showPage(name, how = "push") {
   name = OLD_PAGES[name] || name;
   if (!$(name) || !$(name).classList.contains("page")) name = "home";
-  if (name !== CURRENT && DIRTY && !(await confirmBox("Leave without saving?", `Your changes to ${DIRTY.what} are not saved.`, "Discard changes", true))) return;
+  if (name !== CURRENT && DIRTY && !(await confirmBox("Leave without saving?", `Your changes to ${DIRTY.what} are not saved.`, "Discard changes", true))) {
+    if (how === "none") navigate(pagePath(CURRENT));  // Back was pressed: the address goes back to the page still open
+    return;
+  }
   if (name !== CURRENT) setDirty(null);
   const prev = CURRENT;
   CURRENT = name;
@@ -1356,9 +1471,9 @@ async function showPage(name) {
   if (prev && prev !== name) page.classList.add("swap");  // a switch animates in; the first screen of a load (prev is null) does not
   $("crumb").textContent = page.dataset.title.toLowerCase();
   document.title = `${page.dataset.title} · graylog-mcp`;
-  history.replaceState(null, "", `#${name}`);
+  navigate(pagePath(name), how);
   const active = document.querySelector(".nav[aria-current]"); if (active) active.scrollIntoView({block: "nearest", inline: "nearest"});
-  if (name === "home" || name === "activity") { loadDashboard(); if (name === "activity") { renderActivity(); loadLearned(); } }
+  if (name === "home" || name === "activity") { loadDashboard(); if (name === "activity") { renderActivity(); loadLearned(); renderActivityTab(); } }
   if (name === "config") loadRaw().catch(rawLoadFailed);
   if (name === "connect") loadClients().catch(clientsLoadFailed);
   if (name === "redaction") { renderRedaction(); previewRedaction(); }
@@ -1675,7 +1790,7 @@ function renderStatusLine() {
 let ATTN = new Map();
 const STEP_VERB = {server: "Start", autostart: "Turn on", claude: "Connect"};
 const topOf = (list) => { const n = {}; for (const x of list) n[x] = (n[x] || 0) + 1; return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0]; };
-async function openActivityProblems() { Object.assign(F, {q: "", tool: "", status: "nothing", bucket: null}); await showPage("activity"); setTab("calls"); renderActivity(); }
+async function openActivityProblems() { Object.assign(CALL_F, {q: "", tool: "", status: "nothing", bucket: null}); ACT_TAB = "calls"; await showPage("activity"); }
 function attentionItems() {
   const items = [], envs = STATE ? STATE.instances : [];
   for (const e of envs.filter((x) => !CTX_ENV || x.name === CTX_ENV)) {
@@ -1889,16 +2004,25 @@ function overall(envs, key) {
 // ------------------------------------------------------------------ dashboard and activity data
 let RANGE = "24h", STATS = null, USAGE = null, LOADED = {stats: null, usage: null}, LOAD_SEQ = 0;
 const rangeWord = () => (RANGE === "7d" ? "7 days" : "24 hours");
-document.querySelectorAll("[data-range]").forEach((b) => b.addEventListener("click", () => {
-  RANGE = b.dataset.range;
-  document.querySelectorAll("[data-range]").forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.range === RANGE)));
+// Overview and Activity show the same range: their two pickers move together
+const RANGE_BUTTONS = () => document.querySelectorAll("#home [data-range], #activity [data-range]");
+function setRange(r) {
+  RANGE = r === "7d" ? "7d" : "24h";
+  RANGE_BUTTONS().forEach((x) => x.setAttribute("aria-pressed", String(x.dataset.range === RANGE)));
+}
+RANGE_BUTTONS().forEach((b) => b.addEventListener("click", () => {
+  setRange(b.dataset.range);
+  if (CURRENT === "activity") syncActivityUrl("push");
   loadDashboard(true);
 }));
+// the Overview counts the model's calls only; Activity adds the Playground's runs when asked
+const usageSource = () => (CURRENT === "activity" && CALL_F.playground ? "all" : "mcp");
+const usageKey = () => `${RANGE}|${usageSource()}`;
 async function loadDashboard(force = false) {
-  const seq = ++LOAD_SEQ, jobs = [];
-  if (force || LOADED.usage !== RANGE) {
+  const seq = ++LOAD_SEQ, jobs = [], key = usageKey();
+  if (force || LOADED.usage !== key) {
     USAGE = null; LOAD_ERR.usage = ""; renderDashboard();
-    jobs.push(api(`/api/usage?range=${RANGE}`).then((u) => { if (seq !== LOAD_SEQ) return; USAGE = u; LOADED.usage = RANGE; renderDashboard(); renderActivity(); })
+    jobs.push(api(`/api/usage?range=${RANGE}&source=${usageSource()}`).then((u) => { if (seq !== LOAD_SEQ) return; USAGE = u; LOADED.usage = key; renderDashboard(); renderActivity(); })
       .catch((e) => { if (seq !== LOAD_SEQ) return; LOAD_ERR.usage = e.message; toast(e.message, "fail"); renderDashboard(); renderActivity(); }));
   }
   if ((force || LOADED.stats !== RANGE) && STATE && STATE.instances.length) {
@@ -1947,7 +2071,7 @@ function renderDashboard() {
       u && u.totals.searches ? `${u.totals.misses} of ${u.totals.searches} searches found nothing` : "");
   // a figure counts up once per range (KPI_COUNTED); a refresh of the same range sets it at once. Only figures from data loaded
   // for this range count (LOADED), so a stale render from the old range does not use up the count. "…" and "-" are not numbers.
-  const figs = $("kpis").querySelectorAll(".kv"), st = LOADED.stats === RANGE, us = LOADED.usage === RANGE;
+  const figs = $("kpis").querySelectorAll(".kv"), st = LOADED.stats === RANGE, us = LOADED.usage === usageKey();
   [[st && !noEnv && tot !== null, tot, short], [st && !noEnv && errs !== null, errs, short], [us && !!u, calls, num], [us && hit !== null, hit, (n) => `${n}%`]]
     .forEach(([ok, to, fmt], k) => { if (ok && KPI_COUNTED[k] !== RANGE) { KPI_COUNTED[k] = RANGE; countUp(figs[k], to, fmt); } });
   $("volSub").textContent = `messages per ${step === 1 ? "hour" : `${step} hours`}, ${ctxEnv ? label(ctxEnv) : "every environment"}`;
@@ -1988,8 +2112,8 @@ function bucketLabel(t, step) {
   return step >= 6 ? d.toLocaleString([], {weekday: "short", hour: "2-digit", minute: "2-digit"}) : d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"});
 }
 // activity: the chart is a filter, the list shows `recent` (the latest 200 calls), the tabs hold the rest
-let ACT_TAB = "calls", ACT_FOR = null, ACT_CALLS = [], ACT_FIRST = true;
-const F = {q: "", tool: "", status: "all", bucket: null};
+let ACT_TAB = "dashboard", ACT_FOR = null, ACT_CALLS = [], ACT_FIRST = true;
+const CALL_F = {q: "", tool: "", status: "all", bucket: null, playground: false};  // the Calls tab's filters, in its URL
 const pad2 = (n) => String(n).padStart(2, "0");
 const fmtMs = (ms) => (ms >= 10000 ? `${Math.round(ms / 1000)}s` : `${num(ms)}ms`);
 function whenShort(ts) {
@@ -2032,6 +2156,7 @@ function rowHtml(c, i) {
   return `<div class="crow" role="listitem" data-i="${i}"><div class="clip">
     <div class="chead" tabindex="0" role="button" aria-expanded="false" aria-controls="cd${i}">
       <span class="ct" title="${esc(new Date(c.ts * 1000).toLocaleString())}">${whenShort(c.ts)}</span><span class="ctool">${esc(c.tool)}</span><span class="cenv">${esc(c.instance || "")}</span>
+      <a class="cconv" href="${esc(callHref(c))}" data-conv title="Open this call in its conversation">${esc(convShort(conversationOf(c)))}</a>
       <span class="cwhat" title="${esc(ask)}">${esc(ask)}</span><span class="cst">${st}</span><span class="cms">${fmtMs(c.ms || 0)}</span><span class="cn${miss ? " zero" : ""}">${c.ok && c.results !== undefined ? num(c.results) : "-"}</span></div>
     <div class="cdet" id="cd${i}" inert><div>${detailHtml(c)}</div></div></div></div>`;
 }
@@ -2046,11 +2171,11 @@ function callMatches(c, u) {
   const bi = bucketIndex(c, u);
   if (bi < 0 || bi >= u.buckets.length) return false;
   if (CTX_ENV && c.instance !== CTX_ENV) return false;
-  if (F.tool && c.tool !== F.tool) return false;
-  if (F.status === "error" && (c.ok || c.status === "running")) return false;
-  if (F.status === "nothing" && !isMissCall(c)) return false;
-  if (F.bucket != null && bi !== F.bucket) return false;
-  return !F.q || c._hay.includes(F.q);
+  if (CALL_F.tool && c.tool !== CALL_F.tool) return false;
+  if (CALL_F.status === "error" && (c.ok || c.status === "running")) return false;
+  if (CALL_F.status === "nothing" && !isMissCall(c)) return false;
+  if (CALL_F.bucket != null && bi !== CALL_F.bucket) return false;
+  return !CALL_F.q || c._hay.includes(CALL_F.q);
 }
 function toggleRow(row, force) {
   const open = force ?? !row.classList.contains("open");
@@ -2067,40 +2192,44 @@ function applyFilters() {
     if (!on && row.classList.contains("open")) toggleRow(row, false);
   });
   if (ACT_FIRST) { ACT_FIRST = false; requestAnimationFrame(() => requestAnimationFrame(() => list.classList.remove("nt"))); }
-  const kept = ACT_CALLS.length;
-  $("acount").textContent = `Showing ${num(shown)} of ${num(kept)} kept calls${u.totals.calls > kept ? ` · ${num(u.totals.calls)} in this range, the latest ${kept} are kept` : ""}`;
+  const kept = ACT_CALLS.length, all = u.total_recent ?? kept;
+  $("acount").textContent = `Showing ${num(shown)} of the latest ${num(kept)} calls${all > kept ? ` · ${num(all)} in this range` : ""}`;
   $("nCalls").textContent = shown;
   const empty = $("aempty"); empty.hidden = shown > 0;
   if (!shown) {
-    const noDetail = F.bucket != null && !ACT_CALLS.some((c) => bucketIndex(c, u) === F.bucket);
+    const noDetail = CALL_F.bucket != null && !ACT_CALLS.some((c) => bucketIndex(c, u) === CALL_F.bucket);
     empty.textContent = !ACT_CALLS.length ? "// no calls recorded in this range yet"
-      : noDetail ? `// no details kept for ${bucketSpan(u, F.bucket)}: the list keeps only the latest ${kept} calls` : "// no call matches these filters";
+      : noDetail ? `// no details kept for ${bucketSpan(u, CALL_F.bucket)}: the list keeps only the latest ${kept} calls` : "// no call matches these filters";
   }
 }
 function syncFilterUi() {
   const u = USAGE;
-  if ($("aq").value.trim().toLowerCase() !== F.q) $("aq").value = F.q;
-  $("atool").value = F.tool;
-  document.querySelectorAll("#astat button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.st === F.status)));
-  $("abkt").hidden = F.bucket == null || !u;
-  if (F.bucket != null && u) $("abktText").textContent = `when: ${bucketSpan(u, F.bucket)}`;
-  $("aclear").hidden = !(F.q || F.tool || F.status !== "all" || F.bucket != null);
-  $("nTools").textContent = u ? u.tools.length : "";
+  if ($("aq").value.trim().toLowerCase() !== CALL_F.q) $("aq").value = CALL_F.q;
+  $("atool").value = CALL_F.tool;
+  document.querySelectorAll("#astat button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.st === CALL_F.status)));
+  $("abkt").hidden = CALL_F.bucket == null || !u;
+  if (CALL_F.bucket != null && u) $("abktText").textContent = `when: ${bucketSpan(u, CALL_F.bucket)}`;
+  $("aclear").hidden = !(CALL_F.q || CALL_F.tool || CALL_F.status !== "all" || CALL_F.bucket != null);
   $("nLearned").textContent = LEARNED ? learnedRules().length : "";
 }
 const refilter = () => { applyFilters(); syncFilterUi(); };
-function pickBucket(i, refocus) { F.bucket = F.bucket === i ? null : i; renderActivity(); if (refocus) document.querySelector("#callsChart svg")?.focus(); }
+// a bar of the chart lists its calls; the bar picked again, from the keyboard, unpicks it
+function pickBucket(i, refocus) {
+  CALL_F.bucket = CALL_F.bucket === i ? null : i;
+  if (refocus) { renderActivity(); document.querySelector("#callsChart svg")?.focus(); return; }
+  if (CALL_F.bucket != null) setTab("calls"); else renderActivity();
+}
 function renderActivity() {
   const u = USAGE, errs = u ? u.totals.errors : 0;
   $("navActs").textContent = errs; $("navActs").classList.toggle("hidden", !errs); $("navActs").title = `${errs} errors in this range`;
   if (!u) { $("callsChart").innerHTML = LOAD_ERR.usage ? `<div class="inline-msg">Could not load the calls: ${esc(LOAD_ERR.usage)}. Press Refresh to try again.</div>` : '<div class="skeleton"></div>'; return; }
   $("usageOff").innerHTML = u.enabled ? "" : `<div class="banner info">${ICON.info}<div class="text">Recording is off: <code>GRAYLOG_MCP_USAGE=off</code> is set for the server. Remove it to see activity again.</div></div>`;
   if (ACT_FOR !== u) {  // a new load: new rows, and the filters that point into the old range are dropped
-    const keepBucket = F.bucket != null && F.bucket < u.buckets.length && ACT_FOR && ACT_FOR.range_hours === u.range_hours;
-    if (!keepBucket) F.bucket = null;
+    const keepBucket = CALL_F.bucket != null && CALL_F.bucket < u.buckets.length && ACT_FOR && ACT_FOR.range_hours === u.range_hours;
+    if (!keepBucket) CALL_F.bucket = null;
     ACT_FOR = u; buildActRows(u);
     $("atool").innerHTML = `<option value="">Every tool</option>${u.tools.map((t) => `<option value="${esc(t.tool)}">${esc(t.tool)}</option>`).join("")}`;
-    if (!u.tools.some((t) => t.tool === F.tool)) F.tool = "";
+    if (!u.tools.some((t) => t.tool === CALL_F.tool)) CALL_F.tool = "";
   }
   $("callsSub").textContent = `${num(u.totals.calls)} calls · ${num(u.totals.misses)} found nothing · ${num(u.totals.errors)} errors · per ${u.bucket_hours === 1 ? "hour" : `${u.bucket_hours} hours`}${CTX_ENV ? " · every environment" : ""}`;
   const chart = $("callsChart");
@@ -2109,20 +2238,26 @@ function renderActivity() {
     {name: "Found something", values: u.buckets.map((b) => b.calls - b.misses - b.errors), color: "var(--chart-ink)"},
     {name: "Found nothing", values: u.buckets.map((b) => b.misses), color: "var(--chart-warn)"},
     {name: "Error", values: u.buckets.map((b) => b.errors), color: "var(--color-error)"},
-  ], {name: "Tool calls", height: 220, select: {index: F.bucket, pick: pickBucket}});
+  ], {name: "Tool calls", height: 220, select: {index: CALL_F.bucket, pick: pickBucket}});
   refilter();
-  if (ACT_TAB === "tools") renderToolsTab(); else if (ACT_TAB === "learned") renderLearned();
+  if (ACT_TAB === "dashboard") renderActDashboard(u); else if (ACT_TAB === "learned") renderLearned();
 }
 
 let resizeTimer = null;
 window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (CURRENT === "home") renderDashboard(); if (CURRENT === "activity") renderActivity(); }, 150); });
-$("aq").addEventListener("input", (e) => { F.q = e.target.value.trim().toLowerCase(); refilter(); });
-$("atool").addEventListener("change", (e) => { F.tool = e.target.value; refilter(); });
-$("astat").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { F.status = b.dataset.st; refilter(); } });
-$("abktClear").addEventListener("click", () => { F.bucket = null; renderActivity(); });
-$("aclear").addEventListener("click", () => { Object.assign(F, {q: "", tool: "", status: "all", bucket: null}); renderActivity(); });
+$("aq").addEventListener("input", (e) => { CALL_F.q = e.target.value.trim().toLowerCase(); refilter(); syncActivityUrl("replace"); });
+$("atool").addEventListener("change", (e) => { CALL_F.tool = e.target.value; refilter(); syncActivityUrl("push"); });
+$("astat").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { CALL_F.status = b.dataset.st; refilter(); syncActivityUrl("push"); } });
+$("abktClear").addEventListener("click", () => { CALL_F.bucket = null; renderActivity(); });
+$("aclear").addEventListener("click", () => { Object.assign(CALL_F, {q: "", tool: "", status: "all", bucket: null}); renderActivity(); syncActivityUrl("push"); });
 $("actCtxClear").addEventListener("click", () => setEnv(null));
-$("actRefresh").addEventListener("click", (e) => busy(e.currentTarget, () => Promise.all([loadDashboard(true), loadLearned()])));
+$("actRefresh").addEventListener("click", (e) => busy(e.currentTarget, () => Promise.all([
+  loadDashboard(true), loadLearned(), ACT_TAB === "conversations" ? (CONV.id ? loadConversationDetail() : loadConversations(true)) : null,
+])));
+$("actPlay").addEventListener("change", (e) => {
+  CALL_F.playground = e.target.checked; syncActivityUrl("push");
+  loadDashboard(); if (ACT_TAB === "conversations" && !CONV.id) loadConversations();
+});
 
 const callHeads = () => [...document.querySelectorAll("#alist .crow:not(.off) .chead")];
 function moveRow(d) {
@@ -2141,6 +2276,11 @@ async function copyCall(c, btn) {
 $("alist").addEventListener("click", (e) => {
   const row = e.target.closest(".crow"); if (!row) return;
   const c = ACT_CALLS[+row.dataset.i];
+  if (e.target.closest("[data-conv]")) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button) return;  // a new tab or window follows the link itself
+    e.preventDefault();
+    return openConversation(conversationOf(c), null, c.call_id || null, c.call_id ? null : String(Math.round(c.ts * 1000)));
+  }
   if (e.target.closest("[data-play]")) return playCall(c);
   const cp = e.target.closest("[data-copy]"); if (cp) return copyCall(c, cp);
   if (e.target.closest("[data-fix]")) return openEnvByName(c.instance);
@@ -2159,23 +2299,6 @@ onKey((e, k) => {
     if (h) playCall(ACT_CALLS[+h.closest(".crow").dataset.i]); else toast("Select a call first with J / K", "info");
   }
 }, () => CURRENT === "activity" && ACT_TAB === "calls");
-
-// by tool: the counts and timings are the server's, for every call in the range
-function renderToolsTab() {
-  const u = USAGE; if (!u) return;
-  const max = Math.max(1, ...u.tools.map((t) => t.calls));
-  $("toolTable").innerHTML = u.tools.length ? `<div class="cmeta"><span>counts cover every call in the range${CTX_ENV ? ", in every environment" : ""} · click a tool to list its calls</span></div>
-    <div class="trow head" aria-hidden="true"><span>Tool</span><span class="bar-cell"></span><span class="num">Calls</span><span class="num">Found nothing</span><span class="num">Errors</span><span class="num lat">Median</span><span class="num lat">p95</span></div>
-    ${u.tools.map((t) => `<div class="trow go" role="button" tabindex="0" data-tool="${esc(t.tool)}" aria-label="${esc(t.tool)}: ${t.calls} calls. Show them in the list.">
-      <span class="tn">${esc(t.tool)}</span><span class="bar-cell"><span class="track"><span class="fill" data-w="${t.calls / max}"><i style="flex:${Math.max(0, t.calls - t.misses - t.errors)}"></i><i class="m" style="flex:${t.misses}"></i><i class="e" style="flex:${t.errors}"></i></span></span></span>
-      <span class="num">${num(t.calls)}</span><span class="num${t.misses ? " warn" : ""}">${num(t.misses)}</span><span class="num${t.errors ? " bad" : ""}">${num(t.errors)}</span>
-      <span class="num lat">${t.p50_ms ? fmtMs(t.p50_ms) : "-"}</span><span class="num lat">${t.p95_ms ? fmtMs(t.p95_ms) : "-"}</span></div>`).join("")}`
-    : '<div class="allclear">// no tool called in this range yet</div>';
-  requestAnimationFrame(() => requestAnimationFrame(() => document.querySelectorAll("#toolTable .fill").forEach((f) => { f.style.transform = `scaleX(${f.dataset.w})`; })));
-}
-function openTool(row) { F.tool = row.dataset.tool; setTab("calls"); renderActivity(); }
-$("toolTable").addEventListener("click", (e) => { const r = e.target.closest(".trow.go"); if (r) openTool(r); });
-$("toolTable").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches(".trow.go")) openTool(e.target); });
 
 // learned fixes: weight = mean of Beta(1 + used, 1 + offered - used); automatic past the server's threshold
 let LEARNED = null;
@@ -2215,19 +2338,78 @@ $("learnList").addEventListener("click", async (ev) => {
   } catch (e) { wrap.classList.remove("gone"); wrap.inert = false; toast(e.message, "fail"); }
 });
 
-// tabs
-function setTab(t, focus) {
-  ACT_TAB = t;
-  document.querySelectorAll("#actTabs button").forEach((b) => { const on = b.dataset.tab === t; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
-  for (const x of ["calls", "tools", "learned"]) $("tab-" + x).hidden = x !== t;
-  if (t === "tools") renderToolsTab(); else if (t === "learned") renderLearned();
+// tabs: one tablist per page, each with its own tabs (the panels are #tab-<name>); `pick` is called with the new tab
+function tabList(listId, names, pick) {
+  const list = $(listId);
+  const show = (t, focus) => {
+    list.querySelectorAll("[data-tab]").forEach((b) => { const on = b.dataset.tab === t; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; if (on && focus) b.focus(); });
+    for (const x of names) $("tab-" + x).hidden = x !== t;
+  };
+  list.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) pick(b.dataset.tab, false); });
+  list.addEventListener("keydown", (e) => {
+    const i = names.indexOf(list.querySelector('[aria-selected="true"]')?.dataset.tab), n = names.length;
+    const to = {ArrowRight: (i + 1) % n, ArrowLeft: (i + n - 1) % n, Home: 0, End: n - 1}[e.key]; if (to === undefined) return;
+    e.preventDefault(); pick(names[to], true);
+  });
+  return show;
 }
-$("actTabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab); });
-$("actTabs").addEventListener("keydown", (e) => {
-  const order = ["calls", "tools", "learned"], i = order.indexOf(ACT_TAB);
-  const n = {ArrowRight: (i + 1) % 3, ArrowLeft: (i + 2) % 3, Home: 0, End: 2}[e.key]; if (n === undefined) return;
-  e.preventDefault(); setTab(order[n], true);
-});
+const ACT_TABS = ["dashboard", "conversations", "calls", "learned"];
+const showActTab = tabList("actTabs", ACT_TABS, (t, focus) => setTab(t, focus));
+function setTab(t, focus = false, how = "push") {
+  ACT_TAB = ACT_TABS.includes(t) ? t : "dashboard";
+  showActTab(ACT_TAB, focus);
+  syncActivityUrl(how);
+  renderActivityTab();
+}
+// what the open tab needs: the dashboard and calls draw from /api/usage, the conversations load their own list
+function renderActivityTab() {
+  if (CURRENT !== "activity") return;
+  showActTab(ACT_TAB, false);
+  $("actRange").hidden = ACT_TAB === "conversations" || ACT_TAB === "learned";  // those have a range of their own, or none
+  if (ACT_TAB === "conversations") { renderConversationView(); if (CONV.id) { if (!CONV.detail) loadConversationDetail(); } else loadConversations(); }
+  else clearTimeout(CONV.timer);
+  if (USAGE) renderActivity(); else if (ACT_TAB === "learned") renderLearned();
+}
+
+// the Activity address: /activity/<tab>[/<conversation>]?<filters>
+function activityPath() {
+  const q = new URLSearchParams();
+  if (RANGE !== "24h" && ACT_TAB !== "conversations") q.set("range", RANGE);
+  if (CALL_F.playground) q.set("playground", "1");
+  if (ACT_TAB === "calls") {
+    if (CALL_F.tool) q.set("tool", CALL_F.tool);
+    if (CALL_F.status !== "all") q.set("status", CALL_F.status);
+    if (CALL_F.q) q.set("q", CALL_F.q);
+  }
+  if (ACT_TAB === "conversations") {
+    if (CONV.id) {
+      if (CONV.turn) q.set("turn", CONV.turn);
+      if (CONV.call) q.set("call", CONV.call); else if (CONV.at) q.set("at", CONV.at);
+      return pathOf("activity", ["conversations", CONV.id], q);
+    }
+    if (CONV.range !== "7d") q.set("range", CONV.range);
+    if (CONV.status !== "all") q.set("status", CONV.status);
+    if (CONV.q) q.set("q", CONV.q);
+  }
+  return pathOf("activity", ACT_TAB === "dashboard" ? [] : [ACT_TAB], q);
+}
+function syncActivityUrl(how = "push") { if (CURRENT === "activity") navigate(activityPath(), how); }
+function applyActivityRoute(r) {
+  const q = r.query, tab = r.sub[0] || "dashboard";
+  ACT_TAB = ACT_TABS.includes(tab) ? tab : "dashboard";
+  CALL_F.playground = q.get("playground") === "1"; $("actPlay").checked = CALL_F.playground;
+  if (ACT_TAB !== "conversations") setRange(q.get("range") || "24h");
+  if (ACT_TAB === "calls") Object.assign(CALL_F, {tool: q.get("tool") || "", status: q.get("status") || "all", q: (q.get("q") || "").toLowerCase()});
+  if (ACT_TAB === "conversations") {
+    const id = r.sub[1] || null;
+    Object.assign(CONV, {range: q.get("range") || "7d", status: q.get("status") || "all", q: q.get("q") || ""});
+    if (id !== CONV.id || q.get("turn") !== CONV.turn) CONV.detail = null;
+    Object.assign(CONV, {id, turn: q.get("turn"), call: q.get("call"), at: q.get("at")});
+    CONV.open = new Set(CONV.call || CONV.at ? [CONV.call || `at:${CONV.at}`] : []);
+    CONV.reveal = !!(CONV.call || CONV.at);
+  }
+}
+function initActivity() { initActivityDashboard(); initConversations(); }
 
 // ------------------------------------------------------------------ environments, groups and repositories
 function groupInfo(g) { return (STATE.groups || []).find((x) => x.name === g) || {}; }
@@ -3080,13 +3262,15 @@ $("paletteList").addEventListener("click", (e) => { const li = e.target.closest(
 
 // ------------------------------------------------------------------ start
 (async () => {
-  if (!TOKEN) { $("banner").innerHTML = `<div class="banner fail">${ICON.fail}<div class="text">Missing access token. Run <code>graylog-mcp ui</code> to open this page with it.</div></div>`; return; }
+  if (!TOKEN) { signedOut(); return; }
+  initActivity();
   try {
     await loadState();
     loadSetup();
-    const start = location.hash.slice(1);
+    const old = location.hash.slice(1);  // an address of earlier versions: #activity
+    if (old && !old.includes("=")) history.replaceState(null, "", pathOf(OLD_PAGES[old] || old));
     CURRENT = null;
-    await showPage(start || "home");
+    await openRoute("replace");
     if (STATE.instances.length) runDoctor(); else { CHECKS = []; renderHealth(); }
   } catch (e) { $("banner").innerHTML = `<div class="banner fail">${ICON.fail}<div class="text">${esc(e.message)}</div></div>`; }
 })();

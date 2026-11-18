@@ -314,6 +314,11 @@ def test_shared_server_with_admin_page(tmp_path, monkeypatch):
         assert health and health["admin"] is True and "commit" in health
         page = httpx.get(f"{base}/admin/", trust_env=False)
         assert page.status_code == 200 and "graylog-mcp" in page.text and "attnList" in page.text
+        # a view's own address opens the page, which builds its links on /admin
+        deep = httpx.get(f"{base}/admin/activity/conversations/aaaaaaaaaaaa?turn=1", trust_env=False)
+        assert '<meta name="graylog-mcp-root" content="/admin">' in deep.text
+        assert '<script src="/admin/static/activity.js">' in deep.text
+        assert httpx.get(f"{base}/admin/static/activity.js", trust_env=False).text.startswith('"use strict"')
         token = {"X-Admin-Token": service.admin_token()}
         assert httpx.get(f"{base}/admin/api/state", trust_env=False).status_code == 401
         state = httpx.get(f"{base}/admin/api/state", headers=token, trust_env=False).json()

@@ -144,6 +144,7 @@ def build_http_app(
 
 def with_admin(app: Any, admin: Any, prefix: str = "/admin") -> Any:
     """Serve ``admin`` under ``prefix`` (with its own token) next to the MCP endpoint."""
+    from graylog_mcp.admin.app import ROOT_KEY
 
     async def dispatch(scope: dict, receive: Any, send: Any) -> None:
         path = scope.get("path", "") if scope["type"] == "http" else ""
@@ -155,6 +156,7 @@ def with_admin(app: Any, admin: Any, prefix: str = "/admin") -> Any:
             return
         if path.startswith(prefix + "/"):
             inner = dict(scope, path=path[len(prefix) :], raw_path=path[len(prefix) :].encode())
+            inner[ROOT_KEY] = prefix
             await admin(inner, receive, send)
             return
         await app(scope, receive, send)

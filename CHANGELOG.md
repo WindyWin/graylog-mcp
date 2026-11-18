@@ -20,8 +20,15 @@ All notable changes to this project are documented here. The format follows
   usage numbers add the calls per environment and, per tool, slow calls (1 s, 3 s, 10 s), results cut to the size
   budget, the size returned and the last call; `source=all` counts the Playground's runs too. The Activity list
   marks a call still running, cancelled or refused instead of showing it as an error.
+- The admin page's Activity screen has four tabs: Dashboard (calls per hour, per environment and a sortable table
+  per tool), Conversations (each turn, and in one turn its calls by agent with a waterfall of their Graylog
+  requests, the result preview, a JSON download and a refresh while a call runs), Calls and Learned. A
+  *Playground runs* switch counts the Playground's runs too.
 
 ### Changed
+- Each screen of the admin page has its own address (`/admin/activity/conversations/<id>?turn=<ms>`), so the
+  browser's Back and Forward work and a turn or call can be linked to; the old `#activity` links still open. The
+  page's access token is kept per browser instead of per tab, and a page opened without it says how to sign in.
 - Usage records move from the single `usage.jsonl` to `usage/`, one file per process and day, so servers no longer
   share a file. The old file is imported on first use.
 - Usage records are no longer trimmed at 4 MB but kept in tiers, tidied in a background thread: every detail for

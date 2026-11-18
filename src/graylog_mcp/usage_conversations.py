@@ -1,4 +1,4 @@
-"""The recorded calls by conversation and turn, for the admin page's Sessions view.
+"""The recorded calls by conversation and turn, for the admin page's Conversations tab.
 
 A turn is what the agent did for one request of its user. With the Claude Code hook (or a Codex turn id) each call
 carries its ``turn``; without it, a pause of more than 10 minutes starts a new one. A turn is named by the time its
@@ -133,14 +133,18 @@ def conversations(
         if (not instance or instance in row["instances"]) and (not needle or needle in text)
     ]  # fmt: skip
     found.sort(key=lambda r: -r["last_ts"])
-    return {"enabled": enabled(), "range_hours": hours, "total": len(found), "turns": found[:MAX_TURNS]}
+    return {
+        "enabled": enabled(), "range_hours": hours, "total": len(found), "turns": found[:MAX_TURNS],
+        "detail_days": limits().days,  # older calls are only in the "cold" lines
+    }  # fmt: skip
 
 
 def turn_detail(conversation: str, turn: str | None = None, now: float | None = None) -> dict[str, Any] | None:
     """Every call of one conversation, or of one of its turns, with its requests (or their summary) and preview;
     None when nothing of it is kept."""
     now = time.time() if now is None else now
-    since = now - limits().days * 86400
+    days = limits().days
+    since = now - days * 86400
     if turn is not None:
         # from its first call exactly: a call read from before it could join it into an earlier turn
         since = max(since, int(turn) / 1000 - 0.0005)
@@ -156,4 +160,4 @@ def turn_detail(conversation: str, turn: str | None = None, now: float | None = 
         cold = next((cold_row(s) for s in store().sessions(0) if s["conversation"] == conversation), None)
     if not turns and cold is None:
         return None
-    return {"conversation": conversation, "turns": turns, "cold": cold}
+    return {"conversation": conversation, "turns": turns, "cold": cold, "detail_days": days}
