@@ -98,6 +98,8 @@ Suggested investigation flow:
 Counts from aggregate are exact (computed by Graylog); 'count' inside search_logs groups only covers the
 returned page.
 Results are size-capped: when 'truncated' is true, narrow the query or page with next_offset.
+A field 'ui' is a local link to the same view in the admin page, for the user: give it to them as it is; do not
+open, fetch or edit it.
 """
 
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True, open_world_hint=True)

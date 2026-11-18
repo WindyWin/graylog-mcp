@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from graylog_mcp import __version__, explorer, explorer_traces, operations, recover, tools, usage
+from graylog_mcp import __version__, explorer, explorer_traces, operations, recover, tools, ui_links, usage
 from graylog_mcp import secrets as secret_store
 from graylog_mcp import usage_conversations as conversations
 from graylog_mcp.client import GraylogError, QueryError
@@ -1044,15 +1044,13 @@ def build_app(state: AdminState) -> Starlette:
     return guard  # type: ignore[return-value]
 
 
-def _free_port(host: str, start: int) -> int:
-    for port in range(start, start + 20):
-        with socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET) as sock:
-            try:
-                sock.bind((host, port))
-                return port
-            except OSError:
-                continue
-    raise ConfigError(f"no free port between {start} and {start + 19}")
+def _port_busy(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET) as sock:
+        try:
+            sock.bind((host, port))
+        except OSError:
+            return True
+    return False
 
 
 def serve(project_dir: Path, config: str | None, host: str, port: int, open_browser: bool = True) -> int:
@@ -1064,7 +1062,17 @@ def serve(project_dir: Path, config: str | None, host: str, port: int, open_brow
         loopback = False
     if not loopback:
         raise ConfigError("the admin UI writes files on this machine and only listens on 127.0.0.1 / localhost")
-    port = _free_port(host, port)
+    shown = "localhost" if host == "localhost" else f"[{host}]" if ":" in host else host
+    # a fixed port: the page keeps its token per origin, and the links in tool results name this port
+    if _port_busy(host, port):
+        running = ui_links.current()
+        if running is None or running["port"] != port or running["base"] != "/":
+            raise ConfigError(f"port {port} is used by another program; choose a free one with --port")
+        print(f"graylog-mcp admin UI already runs on http://{shown}:{port}/ (pid {running['pid']})")
+        print("  a browser that opened it before keeps its token; otherwise use the link it printed when it started")
+        if open_browser:
+            webbrowser.open(f"http://{shown}:{port}/")
+        return 0
     token = secrets.token_urlsafe(24)
     state = AdminState(
         project_dir,
@@ -1072,11 +1080,16 @@ def serve(project_dir: Path, config: str | None, host: str, port: int, open_brow
         token,
         allowed_hosts=("127.0.0.1", "localhost", "::1"),
     )
-    url = f"http://{'localhost' if host == 'localhost' else host}:{port}/#token={token}"
+    url = f"http://{shown}:{port}/#token={token}"
     print(f"graylog-mcp admin UI for {state.path}")
     print(f"  open: {url}")
     print("  (Ctrl+C to stop; the link contains a one-time access token)")
     if open_browser:
         webbrowser.open(url)
-    uvicorn.run(build_app(state), host=host, port=port, log_level="warning", timeout_graceful_shutdown=3)
+    ui_links.record(host, port, "/")
+    ui_links.forget_on_terminate()
+    try:
+        uvicorn.run(build_app(state), host=host, port=port, log_level="warning", timeout_graceful_shutdown=3)
+    finally:
+        ui_links.forget()
     return 0

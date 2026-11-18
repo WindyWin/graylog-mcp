@@ -203,6 +203,7 @@ def run_http(
 ) -> None:
     import uvicorn
 
+    from graylog_mcp import ui_links
     from graylog_mcp.setup import service
 
     if admin and not _is_loopback(host):
@@ -220,12 +221,15 @@ def run_http(
     if admin:
         log.info("admin page: http://127.0.0.1:%s/admin/ (token in %s)", port, service.home_dir() / "admin-token")
         service.write_pid()
+        ui_links.record("127.0.0.1", port, "/admin/")
+        ui_links.forget_on_terminate()
         threading.Thread(target=_repair_registrations, args=(config_path, port), daemon=True).start()
     try:
         # Claude sessions keep event streams open: give them a few seconds, not forever, on Ctrl+C or stop
         uvicorn.run(app, host=host, port=port, log_level="info", proxy_headers=True, timeout_graceful_shutdown=3)
     finally:
         if admin:
+            ui_links.forget()
             service.clear_pid()
 
 

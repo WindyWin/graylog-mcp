@@ -4,6 +4,7 @@
 
 default_instance = "prod"
 timezone = "Asia/Ho_Chi_Minh"        # naive times in tool calls and all output use this zone
+ui_links = "auto"                    # "off": no link to the admin page's log explorer in results
 
 [limits]
 default_limit = 50                   # messages per search when the model does not say

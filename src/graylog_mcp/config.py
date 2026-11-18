@@ -296,6 +296,7 @@ class Config:
     focus: Focus = Focus()
     ask: AskConfig = AskConfig()
     scan: ScanConfig = field(default_factory=lambda: _parse_scan({}))
+    ui_links: bool = True  # results link to the admin page's log explorer while one runs on this machine
 
     def instance(self, name: str | None) -> InstanceConfig:
         """Resolve 'payment/prod', 'payment prod', 'payment' (its default environment), 'prod' (in the
@@ -369,6 +370,7 @@ class Config:
 # --------------------------------------------------------------------------- helpers
 
 _TOP_KEYS = {
+    "ui_links",
     "default_instance",
     "default_group",
     "only_groups",
@@ -1565,4 +1567,11 @@ def parse_config(
             data.get("ask", {}), from_repo=own_file or (from_file and Path(source).name in PROJECT_CONFIG_NAMES)
         ),
         source=source,
+        ui_links=_parse_ui_links(data.get("ui_links", "auto")),
     )
+
+
+def _parse_ui_links(value: Any) -> bool:
+    if value not in ("auto", "off"):
+        raise ConfigError('ui_links: expected "auto" (a link while the admin page runs) or "off"')
+    return value == "auto"

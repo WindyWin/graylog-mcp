@@ -35,8 +35,13 @@ All notable changes to this project are documented here. The format follows
   how many match; the newest traces with their duration, services and first API; and one trace in order. Values
   are redacted and lists capped (500 messages, offset up to 10,000). These reads are recorded apart from the
   model's calls, and the page's own refreshes (`refresh=1`) not at all.
+- While an admin page runs on the machine, `search_logs`, `trace_request` and `root_cause` add `ui`, a link to the
+  same view in its log explorer: the instance, the redacted query and the absolute range, never the admin token. A
+  trace id that redaction would change is left out of the link. `ui_links = "off"` turns the links off.
 
 ### Changed
+- `graylog-mcp ui` keeps its port (8765, or `--port`) instead of moving to the next free one: when that port is
+  its own running admin page it opens that page, and when another program holds it, it says so.
 - Each screen of the admin page has its own address (`/admin/activity/conversations/<id>?turn=<ms>`), so the
   browser's Back and Forward work and a turn or call can be linked to; the old `#activity` links still open. The
   page's access token is kept per browser instead of per tab, and a page opened without it says how to sign in.
