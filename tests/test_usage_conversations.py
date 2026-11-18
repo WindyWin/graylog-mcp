@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 
 import httpx
@@ -146,15 +147,14 @@ async def test_every_view_of_the_page_has_its_own_address(admin):
                  "/logs/traces?instance=main&from=2026-01-01T10:00:00Z&to=2026-01-01T11:00:00Z&trace=t1")  # fmt: skip
         for path in paths:
             page = await admin.get(path, headers={"X-Admin-Token": ""})  # the page itself needs no token
-            assert page.status_code == 200 and '<meta name="graylog-mcp-root" content="">' in page.text, path
-            assert '<script src="/static/activity.js">' in page.text and "__GRAYLOG_MCP_ROOT__" not in page.text
-            assert '<script src="/static/logs.js">' in page.text
-        for name in ("activity.js", "logs.js"):
-            script = await admin.get(f"/static/{name}")
-            assert script.status_code == 200 and script.headers["content-type"].startswith("text/javascript")
-        assert (await admin.get("/static/index.html")).status_code == 404  # only the files listed
-        assert (await admin.get("/static/..%2Fapp.py")).status_code == 404
-        beside = (await admin.get("/static/../app.py")).text  # the page, never a file next to it
+            assert page.status_code == 200 and '<meta name="graylog-mcp-root" content=""' in page.text, path
+            assert "__GRAYLOG_MCP_ROOT__" not in page.text and "./assets/" not in page.text
+        (script,) = re.findall(r'src="(/assets/[^"]+\.js)"', page.text)
+        loaded = await admin.get(script)
+        assert loaded.status_code == 200 and loaded.headers["content-type"].startswith("text/javascript")
+        assert (await admin.get("/assets/index.html")).status_code == 404  # only the built files
+        assert (await admin.get("/assets/..%2Fapp.py")).status_code == 404
+        beside = (await admin.get("/assets/../app.py")).text  # the page, never a file next to it
         assert beside.startswith("<!doctype html>") and "def build_app" not in beside
         missing = await admin.get("/api/no-such-thing")
         assert missing.status_code == 404 and missing.json() == {"error": "not found"}  # an API is not the page

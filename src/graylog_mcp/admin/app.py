@@ -9,10 +9,14 @@ secrets: tokens typed into the UI to test a connection stay in memory.
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
+import hashlib
 import hmac
 import ipaddress
 import json
+import mimetypes
+import re
 import secrets
 import socket
 import time
@@ -28,7 +32,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from graylog_mcp import __version__, explorer, explorer_traces, operations, recover, tools, ui_links, usage
+from graylog_mcp import __version__, explorer, explorer_traces, operations, rca, recover, tools, ui_links, usage
 from graylog_mcp import secrets as secret_store
 from graylog_mcp import usage_conversations as conversations
 from graylog_mcp.client import GraylogError, QueryError
@@ -262,46 +266,72 @@ def _groups_view(config: Config | None, base_dir: Path, url: str | None = None) 
 
 
 # where the page is served: "" for 'graylog-mcp ui', "/admin" under the shared server (__main__.with_admin). The page
-# reads it from a <meta> rather than a <base>, which the CSP forbids.
+# routes by path, so its files are linked from this root, and the page reads it from a <meta> rather than a <base>,
+# which the CSP forbids.
 ROOT_KEY = "graylog_mcp.admin_root"
 ROOT_MARK = "__GRAYLOG_MCP_ROOT__"
-STATIC_FILES = {"activity.js": "text/javascript; charset=utf-8", "logs.js": "text/javascript; charset=utf-8"}
 
-# index.html carries its own inline script and style, so the CSP must allow 'unsafe-inline' for them;
-# it still blocks framing, foreign hosts and <base>/form hijacking. Tighten with a nonce if the page is split.
-_SECURITY_HEADERS = [
-    (k.encode(), v.encode())
-    for k, v in {
-        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
-        "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "DENY",
-        "Referrer-Policy": "no-referrer",
-    }.items()
-]
+# The page is built from ui/ (Vite + Preact) into static/: index.html plus hashed files under assets/.
+# The only inline script sets the colour scheme before first paint; the CSP allows it by hash, taken from the
+# built page at startup so it cannot drift. The page has no style attributes (values from data use the CSSOM),
+# so styles are 'self' only; the favicon is a file, so images are too.
+_INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script[^>]*>", re.S | re.I)
+
+
+def _security_headers(page: str) -> list[tuple[bytes, bytes]]:
+    hashes = [
+        "'sha256-" + base64.b64encode(hashlib.sha256(body.encode()).digest()).decode() + "'"
+        for body in _INLINE_SCRIPT.findall(page)
+    ]
+    script_src = " ".join(["'self'", *hashes])
+    return [
+        (k.encode(), v.encode())
+        for k, v in {
+            "Content-Security-Policy": f"default-src 'self'; script-src {script_src}; "
+            "style-src 'self'; img-src 'self'; connect-src 'self'; "
+            "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+            "X-Content-Type-Options": "nosniff",
+            "X-Frame-Options": "DENY",
+            "Referrer-Policy": "no-referrer",
+        }.items()
+    ]
 
 
 def build_app(state: AdminState) -> Starlette:
     static = resources.files("graylog_mcp.admin").joinpath("static")
+    built = static.joinpath("index.html").read_text(encoding="utf-8")
+    security_headers = _security_headers(built)
+
+    def page_at(root: str) -> str:
+        # the build links its files relative to the page (./assets/...), which breaks at /logs/traces: they are
+        # linked from the root instead
+        page = built.replace(ROOT_MARK, root).replace('="./assets/', f'="{root}/assets/')
+        return page.replace('href="favicon.svg"', f'href="{root}/favicon.svg"')
 
     async def index(request: Request) -> Response:
         """The page, for every path that is not an API or a file: the page routes by path, so a link to one of its
         views opens that view."""
-        if request.url.path.startswith(("/api/", "/static/")):
+        if request.url.path.startswith(("/api/", "/assets/")):
             return _err("not found", 404)
-        root = request.scope.get(ROOT_KEY, "")
-        page = static.joinpath("index.html").read_text(encoding="utf-8").replace(ROOT_MARK, root)
-        return HTMLResponse(page, headers={"Cache-Control": "no-store"})
+        return HTMLResponse(page_at(request.scope.get(ROOT_KEY, "")), headers={"Cache-Control": "no-store"})
 
-    async def static_file(request: Request) -> Response:
+    async def asset(request: Request) -> Response:
+        # the build names every file after its content, so a browser may keep it for good
         name = request.path_params["name"]
-        if name not in STATIC_FILES:
-            return _err("not found", 404)
+        file = static.joinpath("assets", name)
+        if "/" in name or name.startswith(".") or not file.is_file():
+            return Response("not found", status_code=404, media_type="text/plain")
+        kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
         return Response(
-            static.joinpath(name).read_text(encoding="utf-8"), media_type=STATIC_FILES[name],
-            headers={"Cache-Control": "no-store"},
-        )  # fmt: skip
+            file.read_bytes(), media_type=kind, headers={"Cache-Control": "public, max-age=31536000, immutable"}
+        )
+
+    async def favicon(_request: Request) -> Response:
+        return Response(
+            static.joinpath("favicon.svg").read_bytes(),
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
 
     async def get_state(_request: Request) -> Response:
         error = None
@@ -781,6 +811,52 @@ def build_app(state: AdminState) -> Starlette:
             return _err(str(exc))
         return JSONResponse(result)
 
+    async def get_breakdown(request: Request) -> Response:
+        """One environment by service, by level and by error type, through the same redacted tools the model uses."""
+        rng, _, _ = _range(request)
+        try:
+            app = await state.app()
+            gl = app.gl(request.query_params.get("instance") or None)
+        except (ConfigError, ValueError) as exc:
+            return _err(str(exc))
+        name = gl.cfg.name
+
+        def top(field: str, query: str = "*", limit: int = 8) -> Any:
+            return tools.top_values(app, field=field, query=query, range=rng, streams=["*"], limit=limit, instance=name)
+
+        async def errors() -> dict[str, Any]:
+            out: dict[str, Any] = {}
+            for group_by in ("exception", "logger"):  # the first that has values in these logs
+                out = await tools.error_summary(
+                    app, range=rng, streams=["*"], group_by=group_by, limit=6, instance=name
+                )
+                if out.get("groups"):
+                    break
+            return out
+
+        try:
+            sf = await rca.service_field(gl)
+            services, service_errors, levels, errs = await asyncio.wait_for(
+                asyncio.gather(top(sf), top(sf, gl.cfg.error_query), top("level", limit=8), errors()), timeout=25
+            )
+        except Exception as exc:  # an unreachable Graylog is shown on the card, not as a failed page
+            return JSONResponse({"instance": name, "range": rng, "error": str(exc)[:300] or type(exc).__name__})
+        failed = {str(v["value"]): v["count"] for v in service_errors.get("values") or []}
+        return JSONResponse(
+            {
+                "instance": name,
+                "range": rng,
+                "error_query": gl.cfg.error_query,
+                "service_field": sf,
+                "total": services.get("total") or 0,
+                "services": [{**v, "errors": failed.get(str(v["value"]), 0)} for v in services.get("values") or []],
+                "levels": levels.get("values") or [],
+                "errors_total": errs.get("total_errors") or 0,
+                "error_field": errs.get("group_by"),
+                "error_groups": errs.get("groups") or [],
+            }
+        )
+
     async def get_learned(_request: Request) -> Response:
         rules = await asyncio.to_thread(recover.LEARNED.listing)
         return JSONResponse({"enabled": recover.enabled(), "auto_weight": recover.AUTO_WEIGHT,
@@ -966,7 +1042,8 @@ def build_app(state: AdminState) -> Starlette:
 
     routes = [
         Route("/", index),
-        Route("/static/{name}", static_file),
+        Route("/assets/{name}", asset),
+        Route("/favicon.svg", favicon),
         Route("/api/state", get_state),
         Route("/api/test", test_instance, methods=["POST"]),
         Route("/api/instances", save_instance, methods=["POST"]),
@@ -994,6 +1071,7 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/explorer/messages", explore),
         Route("/api/explorer/traces", explore),
         Route("/api/explorer/trace/{id:path}", explore),
+        Route("/api/breakdown", get_breakdown),
         Route("/api/learned", get_learned),
         Route("/api/learned/forget", forget_learned, methods=["POST"]),
         Route("/api/config", get_config),
@@ -1021,7 +1099,7 @@ def build_app(state: AdminState) -> Starlette:
 
         async def send(message: MutableMapping[str, Any]) -> None:
             if message["type"] == "http.response.start":
-                message = {**message, "headers": [*message.get("headers", []), *_SECURITY_HEADERS]}
+                message = {**message, "headers": [*message.get("headers", []), *security_headers]}
             await send_raw(message)
 
         headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers") or []}

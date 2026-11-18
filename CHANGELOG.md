@@ -45,8 +45,25 @@ All notable changes to this project are documented here. The format follows
   the address, favourite views stay in the browser, the agent's recent searches open again, and an optional refresh
   (30 s at the most often) pauses while the browser tab is hidden or a row is open. *Open in Graylog* opens the same
   search there.
+- Admin Overview: an "Inside <environment>" section breaks one environment down by service (with its errors), by level
+  and by exception type, from the new read-only `GET /api/breakdown`. Every row opens a log drawer with the lines
+  behind its number: filter to errors, narrow with a query, load more, open a line to see every field, follow its
+  trace id or read the lines around it, and carry the search to the Playground.
+- Admin Overview: the older figures open their log lines too. A point on Log volume or a bar on Errors opens that hour
+  (or 6 hours), the Log messages and Errors tiles open every line or every error line, the counts on an environment row
+  open that environment's lines, and the Tool calls and Found something tiles open Activity. The drawer can switch
+  environment.
 
 ### Changed
+- The admin page is built from `ui/` (Vite, Preact and `@preact/signals`, strict TypeScript, one component per screen)
+  into `src/graylog_mcp/admin/static/` (`index.html` plus committed hashed files in `assets/`), and is served from
+  there; the wheel, Docker and the tests need no Node. The Content-Security-Policy no longer allows inline scripts
+  except the one that sets the colour scheme before first paint, which it allows by hash, nor inline styles (sizes
+  that come from data are applied through the CSSOM), and the favicon is a file. The page loads from `/` under
+  `graylog-mcp ui` and from `/admin/` under `graylog-mcp start`.
+- The Motion library drives the screen switch, the Activity list, the confirm box and palette, toasts, the
+  segmented-control pill, the figure count-up and the Overview charts, which draw themselves in once per data set;
+  all of it is skipped when the system asks for reduced motion.
 - `graylog-mcp ui` keeps its port (8765, or `--port`) instead of moving to the next free one: when that port is
   its own running admin page it opens that page, and when another program holds it, it says so.
 - Each screen of the admin page has its own address (`/admin/activity/conversations/<id>?turn=<ms>`), so the
