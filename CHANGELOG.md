@@ -29,6 +29,12 @@ All notable changes to this project are documented here. The format follows
   4xx and 5xx), `slow_ms` (thresholds for slow calls) and `latency_unit`. `detect` and the admin page's Log fields
   screen suggest the API and status fields, a route template before a path with ids in it, and a status field only
   when it holds HTTP codes.
+- The admin page's API reads request logs for a log explorer (`/api/explorer/dashboard`, `messages`, `traces`,
+  `trace/<id>`): messages per application and status class, a histogram, and per API its business and technical
+  errors, p50/p95/p99 latency and slow calls, all counted by Graylog over the whole range; pages of messages with
+  how many match; the newest traces with their duration, services and first API; and one trace in order. Values
+  are redacted and lists capped (500 messages, offset up to 10,000). These reads are recorded apart from the
+  model's calls.
 
 ### Changed
 - Each screen of the admin page has its own address (`/admin/activity/conversations/<id>?turn=<ms>`), so the

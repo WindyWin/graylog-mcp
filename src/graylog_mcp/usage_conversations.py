@@ -20,7 +20,7 @@ from graylog_mcp.usage_store import enabled, store
 TURN_GAP_SECONDS = 600
 MAX_TURNS = 200
 RANGES = {"24h": 24, "7d": 168, "30d": 720, "90d": 2160}
-CONVERSATION_ID = re.compile(r"[0-9a-f]{12}|legacy-\d{4}-\d{2}-\d{2}|playground")
+CONVERSATION_ID = re.compile(r"[0-9a-f]{12}|legacy-\d{4}-\d{2}-\d{2}|playground|explorer")
 TURN_ID = re.compile(r"\d{1,16}")
 
 

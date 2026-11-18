@@ -28,6 +28,7 @@ from graylog_mcp.usage_store import hashed
 PROCESS = uuid.uuid4().hex  # with stdio one process serves one client session
 MAX_CONVERSATIONS = 256  # conversations whose call count is kept, least recently used dropped
 PLAYGROUND = "playground"
+EXPLORER = "explorer"  # the admin page's log explorer
 
 _seq: OrderedDict[str, int] = OrderedDict()
 
@@ -42,7 +43,7 @@ def _next_seq(conversation: str) -> int:
 
 @dataclass
 class RecordContext:
-    source: str = "mcp"  # "mcp" or "playground"
+    source: str = "mcp"  # "mcp", "playground" or "explorer"
     tool_name: str | None = None  # the tool the model called; one tool runs several operations
     tool_call_id: str | None = None  # _meta["claudecode/toolUseId"]
     codex_turn: dict[str, Any] | None = None  # _meta["x-codex-turn-metadata"]
@@ -87,8 +88,8 @@ class RecordContext:
         turn = self.codex_turn or {}
         codex_session = turn.get("session_id") or turn.get("sessionId")
         codex_turn = turn.get("turn_id") or turn.get("turnId")
-        if self.source == PLAYGROUND:
-            conversation = PLAYGROUND
+        if self.source in (PLAYGROUND, EXPLORER):  # the admin's own runs, apart from any model's conversation
+            conversation = self.source
         elif codex_session:
             conversation = hashed(str(codex_session))
         elif self.http_session:

@@ -9,6 +9,7 @@ secrets: tokens typed into the UI to test a connection stay in memory.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import ipaddress
 import json
@@ -27,10 +28,10 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from graylog_mcp import __version__, operations, recover, tools, usage
+from graylog_mcp import __version__, explorer, operations, recover, tools, usage
 from graylog_mcp import secrets as secret_store
 from graylog_mcp import usage_conversations as conversations
-from graylog_mcp.client import GraylogError
+from graylog_mcp.client import GraylogError, QueryError
 from graylog_mcp.config import (
     ENV_NAME,
     Config,
@@ -41,7 +42,8 @@ from graylog_mcp.config import (
     resolve_repo_path,
 )
 from graylog_mcp.config import _parse_redaction as parse_redaction
-from graylog_mcp.recording import RecordContext, run_recorded
+from graylog_mcp.operations import Operation
+from graylog_mcp.recording import EXPLORER, RecordContext, run_recorded
 from graylog_mcp.redact import PACKS, PROFILES, Redactor
 from graylog_mcp.setup import claude_trace, clients, configfile, connect, doctor
 from graylog_mcp.setup.detect import detect, local_timezone
@@ -741,6 +743,40 @@ def build_app(state: AdminState) -> Starlette:
         rows = await asyncio.gather(*(one(name) for name in app.instances))
         return JSONResponse({"range": rng, "bucket_hours": step, "environments": list(rows)})
 
+    explorer_ops = {
+        "dashboard": (Operation("explorer_dashboard", explorer.dashboard), ("top",)),
+        "messages": (Operation("explorer_messages", explorer.messages), ("limit", "offset")),
+        "traces": (Operation("explorer_traces", explorer.traces), ("limit",)),
+        "trace": (Operation("explorer_trace", explorer.trace), ()),
+    }
+    explorer_params = {"instance": "instance", "streams": "streams", "q": "query", "range": "range",
+                       "from": "from_time", "to": "to_time"}  # fmt: skip
+
+    async def explore(request: Request) -> Response:
+        """The log explorer's reads (``explorer.py``), recorded apart from the model's calls."""
+        op, numbers = explorer_ops[request.url.path.rsplit("/api/explorer/", 1)[1].split("/", 1)[0]]
+        params = request.query_params
+        args: dict[str, Any] = {arg: params[name] for name, arg in explorer_params.items() if params.get(name)}
+        if op.fn is explorer.trace:
+            args.pop("query", None)
+            args["trace_id"] = request.path_params["id"]
+        for name in numbers:
+            if params.get(name):
+                try:
+                    args[name] = int(params[name])
+                except ValueError:
+                    return _err(f"{name} must be a whole number")
+        try:
+            result, _ = await run_recorded(op, state.app, RecordContext(source=EXPLORER), args)
+        except GraylogError as exc:  # Graylog's answer can quote the query: redacted like everything shown
+            status = 400 if isinstance(exc, QueryError) else 502
+            with contextlib.suppress(Exception):
+                return _err((await state.app()).redactor.value(str(exc)), status)
+            return _err("Graylog refused the request", status)
+        except (ConfigError, ValueError) as exc:
+            return _err(str(exc))
+        return JSONResponse(result)
+
     async def get_learned(_request: Request) -> Response:
         rules = await asyncio.to_thread(recover.LEARNED.listing)
         return JSONResponse({"enabled": recover.enabled(), "auto_weight": recover.AUTO_WEIGHT,
@@ -950,6 +986,10 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/conversations/{id}", get_conversation),
         Route("/api/conversations/{id}/export", export_conversation),
         Route("/api/logstats", get_logstats),
+        Route("/api/explorer/dashboard", explore),
+        Route("/api/explorer/messages", explore),
+        Route("/api/explorer/traces", explore),
+        Route("/api/explorer/trace/{id:path}", explore),
         Route("/api/learned", get_learned),
         Route("/api/learned/forget", forget_learned, methods=["POST"]),
         Route("/api/config", get_config),
