@@ -167,3 +167,15 @@ async def test_a_call_a_merged_tool_refuses_is_recorded(make_app):
     assert refused["tool"] == "count_logs" and not refused["ok"] and "does not take interval" in refused["error"]
     assert refused["args"] == {"query": "level:3"} and refused["instance"] == "main"
     assert incomplete["tool"] == "top_values" and not incomplete["ok"] and "needs group_by" in incomplete["error"]
+
+
+async def test_admin_breakdown_by_service_level_and_error(admin_client):
+    body = (await admin_client.get("/api/breakdown?instance=main")).json()
+    assert body["service_field"] == "service" and body["total"] > 0
+    services = {s["value"]: s for s in body["services"]}
+    assert services["payment"]["errors"] > 0 and services["payment"]["count"] >= services["payment"]["errors"]
+    assert {str(v["value"]) for v in body["levels"]} >= {"3", "6"}
+    assert body["error_field"] == "exception_class" and body["error_groups"][0]["count"] > 0
+    down = (await admin_client.get("/api/breakdown?instance=down")).json()
+    assert "error" in down and "services" not in down  # an unreachable Graylog is reported, not a 500
+    assert (await admin_client.get("/api/breakdown?instance=nope")).status_code == 400
