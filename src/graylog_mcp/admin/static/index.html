@@ -2016,8 +2016,9 @@ function detailHtml(c) {
     kv.push(["size", `${num(c.chars)} chars${c.truncated ? " · cut to the size budget" : ""}`]);
     if (c.requests !== undefined) kv.push(["requests", String(c.requests)]);
     if (c.returned !== undefined && c.results !== undefined) kv.push(["returned", `${num(c.returned)} of ${num(c.results)}`]);
-  } else kv.push(["outcome", `error · ${c.error || "unknown"}`]);
-  const canFix = !c.ok && env && env.local && envHealth(env).cls === "fail";
+  } else if (c.status === "running") kv.push(["outcome", "still running"]);
+  else kv.push(["outcome", `${c.status || "error"} · ${c.error || "unknown"}`]);
+  const canFix = !c.ok && c.status !== "running" && env && env.local && envHealth(env).cls === "fail";
   return `<div class="dwrap"><dl class="kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>
     <div class="blocks"><div><div class="glabel">arguments</div><pre class="json">${jsonHtml(c.args)}</pre></div><div><div class="glabel">parameters</div><pre class="json">${jsonHtml(c.params)}</pre></div></div>
     <div class="dact"><button class="btn primary" data-play>Open in Playground <span class="kbd">P</span></button><button class="btn" data-copy>Copy as JSON</button>
@@ -2026,7 +2027,7 @@ function detailHtml(c) {
 }
 function rowHtml(c, i) {
   const ask = askText(c), miss = isMissCall(c);
-  const st = (!c.ok ? '<span class="badge fail">✕ error</span>' : "") + (miss ? '<span class="badge warn">found nothing</span>' : "")
+  const st = (c.status === "running" ? '<span class="badge">running</span>' : !c.ok ? `<span class="badge fail">✕ ${esc(c.status && c.status !== "error" ? c.status : "error")}</span>` : "") + (miss ? '<span class="badge warn">found nothing</span>' : "")
     + (c.rewritten ? '<span class="badge" title="A safe or learned fix ran instead of the query as written">fixed</span>' : "") + (c.truncated ? '<span class="badge" title="The result was cut to the size budget">cut</span>' : "");
   return `<div class="crow" role="listitem" data-i="${i}"><div class="clip">
     <div class="chead" tabindex="0" role="button" aria-expanded="false" aria-controls="cd${i}">
@@ -2046,7 +2047,7 @@ function callMatches(c, u) {
   if (bi < 0 || bi >= u.buckets.length) return false;
   if (CTX_ENV && c.instance !== CTX_ENV) return false;
   if (F.tool && c.tool !== F.tool) return false;
-  if (F.status === "error" && c.ok) return false;
+  if (F.status === "error" && (c.ok || c.status === "running")) return false;
   if (F.status === "nothing" && !isMissCall(c)) return false;
   if (F.bucket != null && bi !== F.bucket) return false;
   return !F.q || c._hay.includes(F.q);

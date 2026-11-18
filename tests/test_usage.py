@@ -75,7 +75,8 @@ def test_summary_buckets_tools_misses_and_previous_period():
     assert s["totals"] == {"calls": 4, "errors": 1, "searches": 2, "misses": 1, "hit_rate": 50}
     assert s["previous"]["calls"] == 1 and s["previous"]["hit_rate"] == 100
     search = next(t for t in s["tools"] if t["tool"] == "search_logs")
-    assert search == {"tool": "search_logs", "calls": 2, "errors": 0, "misses": 1, "p50_ms": 200, "p95_ms": 300}
+    expected = {"tool": "search_logs", "calls": 2, "errors": 0, "misses": 1, "p50_ms": 200, "p95_ms": 300}
+    assert {k: search[k] for k in expected} == expected  # keys the admin page reads, more may come
     assert s["tools"][0]["tool"] == "search_logs"  # most used first
     assert [m["args"]["query"] for m in s["misses"]] == ["OrderNotFound"]
     assert s["recent"][0]["ts"] > s["recent"][-1]["ts"]  # newest first

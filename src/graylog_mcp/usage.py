@@ -28,6 +28,8 @@ PARAM_KEYS = ("range", "from_time", "to_time", "fields", "limit", "offset")
 PREVIEW_CHARS = 2000
 COMPACT_EVERY = 200  # records written by this process between two housekeeping runs
 COMPACT_INTERVAL_SECONDS = 600
+SLOW_MS = (1000, 3000, 10000)  # the thresholds of the admin page's "slow" column
+RECENT = 200
 
 _writes = 0
 _compacting = threading.Lock()
@@ -200,41 +202,59 @@ def _pct(values: list[int], q: float) -> int:
     return ordered[min(len(ordered) - 1, round(q * (len(ordered) - 1)))]
 
 
-def summarize(hours: int = 24, bucket_hours: int = 1, now: float | None = None) -> dict[str, Any]:
-    """Calls per bucket, per tool (count, errors, empty results, latency), searches that found nothing, and the
-    same totals for the period before (for the change shown next to each number)."""
+def status_of(entry: dict[str, Any]) -> str:
+    """ok, error, refused, cancelled, running or interrupted; a record of an earlier version has only ``ok``."""
+    status = entry.get("status")
+    return str(status) if status else ("ok" if entry.get("ok", False) else "error")
+
+
+def from_source(entry: dict[str, Any], source: str) -> bool:
+    """``source`` is mcp (the model's calls), playground (the admin's runs) or all."""
+    return source == "all" or entry.get("source", "mcp") == source
+
+
+def summarize(hours: int = 24, bucket_hours: int = 1, now: float | None = None, source: str = "mcp") -> dict[str, Any]:
+    """Calls per bucket, per tool (count, errors, empty results, latency, slow calls, size), per environment,
+    searches that found nothing, and the same totals for the period before (for the change shown next to each
+    number). Calls still running are listed in ``recent`` but not counted."""
     now = time.time() if now is None else now
     span, step = hours * 3600, bucket_hours * 3600
     end = (int(now) // step + 1) * step  # buckets end with the current one
     start = end - span
-    # what the model asked: not the admin's Playground runs, nor calls still running
-    entries = [
-        e for e in read(start - span) if e.get("source", "mcp") == "mcp" and e.get("status") != "running"
-    ]  # fmt: skip
+    entries = [e for e in read(start - span) if from_source(e, source)]
     # several processes append (one per stdio session): order by time, not by position in the file
-    current = sorted((e for e in entries if e["ts"] >= start), key=lambda e: e["ts"])
-    previous = [e for e in entries if e["ts"] < start]
+    listed = sorted((e for e in entries if e["ts"] >= start), key=lambda e: e["ts"])
+    current = [e for e in listed if e.get("status") != "running"]
+    previous = [e for e in entries if e["ts"] < start and e.get("status") != "running"]
 
     buckets = [{"t": t, "calls": 0, "errors": 0, "misses": 0} for t in range(start, end, step)]
-    per_tool: dict[str, dict[str, Any]] = defaultdict(lambda: {"calls": 0, "errors": 0, "misses": 0, "ms": []})
+    per_tool: dict[str, dict[str, Any]] = defaultdict(
+        lambda: {"calls": 0, "errors": 0, "misses": 0, "truncated": 0, "ms": [], "chars": [], "last_ts": 0}
+    )
+    per_instance: dict[str, dict[str, Any]] = defaultdict(lambda: {"calls": 0, "errors": 0, "misses": 0})
     for e in current:
         b = buckets[min(len(buckets) - 1, int(e["ts"] - start) // step)]
         t = per_tool[str(e.get("tool"))]
-        b["calls"] += 1
-        t["calls"] += 1
+        i = per_instance[str(e.get("instance") or "")]
         t["ms"].append(int(e.get("ms") or 0))
-        if not e.get("ok", False):
-            b["errors"] += 1
-            t["errors"] += 1
-        if is_miss(e):
-            b["misses"] += 1
-            t["misses"] += 1
+        t["chars"].append(int(e.get("chars") or 0))
+        t["last_ts"] = max(t["last_ts"], e["ts"])
+        t["truncated"] += bool(e.get("truncated"))
+        failed, missed = not e.get("ok", False), is_miss(e)
+        for counts in (b, t, i):
+            counts["calls"] += 1
+            counts["errors"] += failed
+            counts["misses"] += missed
     tools = [
         {"tool": name, "calls": t["calls"], "errors": t["errors"], "misses": t["misses"],
-         "p50_ms": int(statistics.median(t["ms"])) if t["ms"] else 0, "p95_ms": _pct(t["ms"], 0.95)}
+         "p50_ms": int(statistics.median(t["ms"])) if t["ms"] else 0, "p95_ms": _pct(t["ms"], 0.95),
+         "last_ts": t["last_ts"], "slow": {str(ms): sum(1 for v in t["ms"] if v >= ms) for ms in SLOW_MS},
+         "truncated": t["truncated"], "chars_p95": _pct(t["chars"], 0.95)}
         for name, t in per_tool.items()
     ]  # fmt: skip
     tools.sort(key=lambda t: (-t["calls"], t["tool"]))
+    instances = [{"instance": name or None, **counts} for name, counts in per_instance.items()]
+    instances.sort(key=lambda i: (-i["calls"], str(i["instance"])))
 
     def totals(items: list[dict[str, Any]]) -> dict[str, Any]:
         searches = [e for e in items if e.get("tool") in search_names() and e.get("ok")]
@@ -253,8 +273,10 @@ def summarize(hours: int = 24, bucket_hours: int = 1, now: float | None = None) 
         "bucket_hours": bucket_hours,
         "buckets": buckets,
         "tools": tools,
+        "instances": instances,
         "totals": totals(current),
         "previous": totals(previous),
         "misses": [e for e in reversed(current) if is_miss(e)][:25],
-        "recent": list(reversed(current))[:200],
+        "recent": [{**e, "status": status_of(e)} for e in reversed(listed[-RECENT:])],
+        "total_recent": len(listed),
     }

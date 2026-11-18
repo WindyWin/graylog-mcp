@@ -29,6 +29,7 @@ from starlette.routing import Route
 
 from graylog_mcp import __version__, operations, recover, tools, usage
 from graylog_mcp import secrets as secret_store
+from graylog_mcp import usage_conversations as conversations
 from graylog_mcp.client import GraylogError
 from graylog_mcp.config import (
     ENV_NAME,
@@ -636,9 +637,53 @@ def build_app(state: AdminState) -> Starlette:
         """24h in hourly buckets (default) or 7d in 6-hour buckets."""
         return ("7d", 168, 6) if request.query_params.get("range") == "7d" else ("24h", 24, 1)
 
+    def _source(request: Request) -> str | None:
+        source = request.query_params.get("source") or "mcp"
+        return source if source in ("mcp", "playground", "all") else None
+
     async def get_usage(request: Request) -> Response:
         _, hours, step = _range(request)
-        return JSONResponse(await asyncio.to_thread(usage.summarize, hours, step))
+        if (source := _source(request)) is None:
+            return _err("source is mcp, playground or all")
+        return JSONResponse(await asyncio.to_thread(usage.summarize, hours, step, None, source))
+
+    async def get_conversations(request: Request) -> Response:
+        params = request.query_params
+        hours = conversations.RANGES.get(params.get("range") or "7d")
+        if hours is None:
+            return _err(f"range is one of {', '.join(conversations.RANGES)}")
+        if (source := _source(request)) is None:
+            return _err("source is mcp, playground or all")
+        listing = await asyncio.to_thread(
+            conversations.conversations, hours, params.get("instance") or None, params.get("q"), source
+        )
+        return JSONResponse(listing)
+
+    async def _conversation(request: Request) -> dict[str, Any] | Response:
+        conversation, turn = request.path_params["id"], request.query_params.get("turn") or None
+        if not conversations.CONVERSATION_ID.fullmatch(conversation):
+            return _err("not a conversation id")
+        if turn is not None and not conversations.TURN_ID.fullmatch(turn):
+            return _err("turn is the number the conversation list gives")
+        found = await asyncio.to_thread(conversations.turn_detail, conversation, turn)
+        return found if found is not None else _err("no such conversation or turn is kept", 404)
+
+    async def get_conversation(request: Request) -> Response:
+        found = await _conversation(request)
+        return found if isinstance(found, Response) else JSONResponse(found)
+
+    async def export_conversation(request: Request) -> Response:
+        """The same, as a file to save: every value in it was redacted when it was recorded."""
+        found = await _conversation(request)
+        if isinstance(found, Response):
+            return found
+        turn = request.query_params.get("turn")
+        name = f"graylog-mcp-{found['conversation']}{f'-{turn}' if turn else ''}.json"
+        return Response(
+            json.dumps(found, ensure_ascii=False, indent=2, default=str),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
 
     async def get_logstats(request: Request) -> Response:
         """Messages and errors per bucket in every environment, straight from Graylog (nothing is stored)."""
@@ -879,6 +924,9 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/run", run_tool, methods=["POST"]),
         Route("/api/doctor", run_doctor),
         Route("/api/usage", get_usage),
+        Route("/api/conversations", get_conversations),
+        Route("/api/conversations/{id}", get_conversation),
+        Route("/api/conversations/{id}/export", export_conversation),
         Route("/api/logstats", get_logstats),
         Route("/api/learned", get_learned),
         Route("/api/learned/forget", forget_learned, methods=["POST"]),

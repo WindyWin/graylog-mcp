@@ -15,6 +15,11 @@ All notable changes to this project are documented here. The format follows
 - `graylog-mcp install claude-code --trace` (or the switch on the admin page's Connect screen) adds two opt-in hooks
   to the Claude Code settings, so calls are grouped by Claude Code conversation, subagent and turn (the user's
   prompt before them). The hooks record hashed ids only, never the prompt's text; `--untrace` takes them out.
+- The admin page's API lists the recorded calls by conversation and turn (a new turn at each prompt, else after a
+  pause of 10 minutes), opens one turn with its Graylog requests and result previews, and exports it as JSON. Its
+  usage numbers add the calls per environment and, per tool, slow calls (1 s, 3 s, 10 s), results cut to the size
+  budget, the size returned and the last call; `source=all` counts the Playground's runs too. The Activity list
+  marks a call still running, cancelled or refused instead of showing it as an error.
 
 ### Changed
 - Usage records move from the single `usage.jsonl` to `usage/`, one file per process and day, so servers no longer
