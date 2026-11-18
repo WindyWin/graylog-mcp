@@ -432,6 +432,9 @@ Environment variables:
 | `GRAYLOG_APP_PACKAGES` | e.g. `com.acme,/srv/app/` |
 | `GRAYLOG_MCP_CONFIG` | path of a TOML config file |
 | `GRAYLOG_MCP_HTTP_TOKEN` | bearer token required by the HTTP transport |
+| `GRAYLOG_MCP_HOME` | the server's state folder: admin token, pid, log and recorded calls (default `~/.config/graylog-mcp`) |
+| `GRAYLOG_MCP_USAGE` | `calls` records the calls without their result previews, `off` records nothing (see [the admin UI](#setup-helpers-and-admin-ui)) |
+| `GRAYLOG_MCP_USAGE_HOT_DAYS`, `GRAYLOG_MCP_USAGE_DAYS`, `GRAYLOG_MCP_USAGE_SESSION_DAYS`, `GRAYLOG_MCP_USAGE_MAX_MB` | how long recorded calls keep every detail (default 2 days), their summary (15, at the least) and one line per conversation (90), and the folder's size limit (50 MB) |
 
 A TOML file (`--config` or `GRAYLOG_MCP_CONFIG`, else `.graylog-mcp.toml` in the current directory or a
 parent up to the repository root, else `~/.config/graylog-mcp/config.toml`) covers the
@@ -566,7 +569,11 @@ switch tabs, <kbd>G</kbd> then <kbd>O</kbd>/<kbd>A</kbd>/<kbd>E</kbd>/<kbd>F</kb
 Tool calls are recorded by the MCP server (stdio or shared) in `~/.config/graylog-mcp/usage/`, one file per
 process and day: tool, environment, duration, number of results, size, the query or id asked for, the conversation
 it belongs to, the Graylog requests it sent and the first 2,000 characters of its result, all **redacted with your
-redaction rules before they are written**. It stays on your machine. In the server's environment,
+redaction rules before they are written**. It stays on your machine. A call is listed as running until it ends,
+cancelled when the client gave up on it, and interrupted when its server stopped first. Calls group into
+conversations by the client's session (with `install claude-code --trace`, by Claude Code conversation, subagent
+and turn). The Playground's runs are recorded too, marked as such, and left out of the model's numbers unless
+*Playground runs* is on. The `usage.jsonl` file of an earlier version is imported once. In the server's environment,
 `GRAYLOG_MCP_USAGE=calls` keeps the calls without their results and `GRAYLOG_MCP_USAGE=off` turns recording off.
 The server tidies the folder in the background: everything is kept for today and yesterday, each call without its
 result and requests (a summary of them instead) up to 15 days, then one line per conversation up to 90 days, and
@@ -578,7 +585,8 @@ save bar (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>S</kbd>) and are not lost by leavi
 the OS until you pick one (the **Follow OS theme** checkbox goes back to it), with a phone layout; slate greys, teal for actions and data, amber for warnings, coral for failures.
 
 The UI listens on loopback only, checks the Host header, and every API call needs the random token in the
-link printed at startup. It writes the config file and client configs when you ask. A token or password
+link printed at startup. The browser keeps that token once the link is opened, so the page's other addresses
+carry no token; a browser without it is told how to sign in. It writes the config file and client configs when you ask. A token or password
 entered in the form is saved, when you tick "Save it on this machine", to the same per-user secrets file as
 `graylog-mcp login`, never to the config file.
 
@@ -783,6 +791,11 @@ docker run -p 8000:8000 \
   -e GRAYLOG_MCP_HTTP_TOKEN=... graylog-mcp
 ```
 
+The image's user has no home folder, so tool calls are only recorded when `GRAYLOG_MCP_HOME` points to a writable
+volume (`-e GRAYLOG_MCP_HOME=/data -v graylog-mcp:/data`). Keep that folder off network and synced file systems: the
+server's processes lock and rename files in it. A server shared by a team records everyone's queries, redacted, in
+that one folder; `GRAYLOG_MCP_USAGE=off` records none.
+
 ## A server for the team on a VM
 
 One `serve --shared` process on a VM can serve every developer and every repository. The VM cannot read the
@@ -875,6 +888,7 @@ src/graylog_mcp/
   operations.py every operation in one table: what presets, the admin page and usage know by name
   toolspecs/    the tools a model sees, each declared once: its arguments and the operations it runs
   server.py     model instructions, and the MCP tools built from those declarations
+  usage*.py     the recorded tool calls: their store, its three tiers, and conversations and turns
 ```
 
 ## License

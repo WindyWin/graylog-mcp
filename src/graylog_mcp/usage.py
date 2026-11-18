@@ -1,8 +1,9 @@
-"""What the model asks of graylog-mcp: one record per tool call, for the admin page's charts.
+"""What the model asks of graylog-mcp: one record per tool call, for the admin page's Activity screen.
 
-Records go to the usage store (``usage_store``) next to the server's other state (``~/.config/graylog-mcp``).
-Queries and ids are redacted before they are written and nothing leaves the machine. ``GRAYLOG_MCP_USAGE=off``
-turns it off.
+A call is recorded when it starts and when it ends, with its conversation, the Graylog requests it sent and a
+preview of its result. Records go to the usage store (``usage_store``) next to the server's other state
+(``GRAYLOG_MCP_HOME``, else ``~/.config/graylog-mcp``). Every string is redacted before it is written and nothing
+leaves the machine. ``GRAYLOG_MCP_USAGE=off`` turns it off.
 """
 
 from __future__ import annotations
