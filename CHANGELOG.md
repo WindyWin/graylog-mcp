@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows
   sent (path, redacted query, wait, duration, status, retries) and the first 2,000 characters of its redacted result.
   A call that never ended reads back as running, or interrupted once its process is gone. Playground runs are recorded
   too, apart from the model's calls. `GRAYLOG_MCP_USAGE=calls` keeps the calls without the result previews.
+- `graylog-mcp install claude-code --trace` (or the switch on the admin page's Connect screen) adds two opt-in hooks
+  to the Claude Code settings, so calls are grouped by Claude Code conversation, subagent and turn (the user's
+  prompt before them). The hooks record hashed ids only, never the prompt's text; `--untrace` takes them out.
 
 ### Changed
 - Usage records move from the single `usage.jsonl` to `usage/`, one file per process and day, so servers no longer

@@ -2,6 +2,7 @@
 
     usage/live/<day>/<pid>-<start>.jsonl   what one process recorded that day
     usage/days/<day>.jsonl                 a day imported from the old usage.jsonl
+    usage/hooks/<day>.jsonl                what the Claude Code hook saw (setup.claude_trace), joined when read
     usage/compact.lock                     held by the one process doing housekeeping
 
 A call is written twice, ``{"event": "started", "call_id": ...}`` before it runs and ``{"event": "finished", ...}``
@@ -11,12 +12,13 @@ after, and read back as one record. A call that never finished is ``running`` wh
 
 from __future__ import annotations
 
+import bisect
 import contextlib
 import json
 import os
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +26,7 @@ from typing import Any
 from graylog_mcp.usage_store import enabled
 
 DETAIL = ("preview", "spans")
+DAY_SECONDS = 86400
 LOCK_STALE_SECONDS = 600  # a lock older than this was left by a process that died while holding it
 RETRY_SECONDS = 60  # after a failed write (read-only folder, full disk), how long before trying again
 
@@ -49,13 +52,20 @@ class JsonlStore:
         return self._process[1]
 
     def append(self, entry: dict[str, Any]) -> None:
+        self._write(entry, lambda day: self.root / "live" / day / self._file_name())
+
+    def append_hook(self, entry: dict[str, Any]) -> None:
+        # one file per day for every hook process: each line is far below the size an append keeps whole
+        self._write(entry, lambda day: self.root / "hooks" / f"{day}.jsonl")
+
+    def _write(self, entry: dict[str, Any], target_of: Callable[[str], Path]) -> None:
         if not enabled():
             return
         if self._failed_at is not None and time.monotonic() - self._failed_at < RETRY_SECONDS:
             return
         with contextlib.suppress(Exception):
             line = json.dumps(entry, ensure_ascii=False, default=str) + "\n"
-            target = self.root / "live" / _day(float(entry.get("ts") or time.time())) / self._file_name()
+            target = target_of(_day(float(entry.get("ts") or time.time())))
             with self._lock:
                 try:
                     target.parent.mkdir(parents=True, exist_ok=True)
@@ -84,9 +94,41 @@ class JsonlStore:
             if isinstance(e.get("ts"), (int, float)) and e["ts"] >= since and (until is None or e["ts"] <= until)
         ]  # fmt: skip
         out.sort(key=lambda e: e["ts"])  # several processes, several files: order by time, not by position
+        self._attach_hooks(out, _day(since - DAY_SECONDS), last)
         if not detail:
             out = [{k: v for k, v in e.items() if k not in DETAIL} for e in out]
         return out
+
+    def _attach_hooks(self, calls: list[dict[str, Any]], first: str, last: str | None) -> None:
+        """Give each call a Claude Code hook saw that hook's session, agent and turn (the user's prompt before
+        it). Read from a day earlier: a hook runs just before its call, maybe on the other side of midnight."""
+        tools: dict[str, dict[str, Any]] = {}
+        prompts: dict[str, list[tuple[float, str]]] = {}
+        with contextlib.suppress(OSError):
+            for path in sorted((self.root / "hooks").glob("*.jsonl")):
+                if path.stem < first or (last is not None and path.stem > last):
+                    continue
+                for row in _lines(path):
+                    if row.get("kind") == "tool" and row.get("tool_use"):
+                        tools[row["tool_use"]] = row
+                    elif row.get("kind") == "prompt" and row.get("session") and isinstance(row.get("ts"), (int, float)):
+                        prompts.setdefault(row["session"], []).append((row["ts"], str(row.get("prompt"))))
+        if not tools:
+            return
+        for found in prompts.values():
+            found.sort()
+        times = {session: [ts for ts, _ in found] for session, found in prompts.items()}
+        for call in calls:
+            hook = tools.get(str(call.get("tool_call_id")))
+            if hook is None or not hook.get("session"):
+                continue
+            call["conversation"] = hook["session"]
+            for key in ("agent", "agent_type"):
+                if hook.get(key):
+                    call[key] = hook[key]
+            i = bisect.bisect_right(times.get(hook["session"], []), call["ts"])
+            if i:
+                call["turn"] = prompts[hook["session"]][i - 1][1]
 
     def calls_of(self, conversation: str, since: float, until: float) -> list[dict[str, Any]]:
         return [e for e in self.read(since, until, detail=True) if e.get("conversation") == conversation]

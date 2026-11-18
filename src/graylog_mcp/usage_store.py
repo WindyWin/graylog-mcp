@@ -7,6 +7,7 @@ requests but not the previews of their results.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import threading
 from pathlib import Path
@@ -26,6 +27,11 @@ SEMCONV = {
 }
 
 
+def hashed(value: str) -> str:
+    """Ids from clients are stored as 12 hex characters: enough to group by, nothing to replay."""
+    return hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:12]
+
+
 def _mode() -> str:
     return os.environ.get("GRAYLOG_MCP_USAGE", "").strip().lower()
 
@@ -43,8 +49,12 @@ class UsageStore(Protocol):
     def append(self, entry: dict[str, Any]) -> None:
         """Record one entry. Never raises: recording must not break a tool call."""
 
+    def append_hook(self, entry: dict[str, Any]) -> None:
+        """Record what a client hook saw (``kind`` "tool" or "prompt"). Never raises."""
+
     def read(self, since: float, until: float | None = None, detail: bool = False) -> list[dict[str, Any]]:
-        """Entries with ``since <= ts <= until``, oldest first; ``preview`` and ``spans`` only with ``detail``."""
+        """Entries with ``since <= ts <= until``, oldest first; ``preview`` and ``spans`` only with ``detail``.
+        A call a hook saw takes the hook's conversation, agent and turn."""
 
     def calls_of(self, conversation: str, since: float, until: float) -> list[dict[str, Any]]:
         """The entries of one conversation, with detail."""

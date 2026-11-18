@@ -522,6 +522,7 @@ Clients that do not start the server inside the repository (Claude Desktop) need
 | `graylog-mcp doctor` | Checks every environment (token set, reachable, TLS, version, readable streams, data, configured fields exist, error query matches, redaction) and prints a fix for each problem. Exit code 1 on failure, `--json` for CI. |
 | `graylog-mcp detect` | Suggests `service_fields`, `trace_fields`, `version_fields`, `latency_fields`, `error_query` (syslog numbers or words), exception/logger fields and `app_packages` from the logs, with coverage and redacted sample values. `--apply` writes them. |
 | `graylog-mcp install <client>` | Registers the server in `claude-code` (`.mcp.json`), `cursor`, `vscode` or `claude-desktop`, merging with existing entries and keeping a `.bak`. Tokens are referenced as `${VAR}` / `${env:VAR}`, never written (Claude Desktop gets placeholders unless `--with-secrets`). |
+| `graylog-mcp install claude-code --trace` | Opt-in: adds two hooks to your Claude Code settings (`~/.claude/settings.json`, or `.claude/settings.local.json` with `--scope project`) so the admin page groups calls by conversation, subagent and turn. They record hashed ids only, never the prompt's text. `--untrace` takes them out; your own hooks are kept. The admin page's Connect screen has the same switch. |
 | `graylog-mcp ui` | Local admin web UI (below). |
 
 `graylog-mcp ui` opens a page on `127.0.0.1` with:

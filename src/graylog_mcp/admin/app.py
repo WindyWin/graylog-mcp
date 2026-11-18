@@ -42,7 +42,7 @@ from graylog_mcp.config import (
 from graylog_mcp.config import _parse_redaction as parse_redaction
 from graylog_mcp.recording import RecordContext, run_recorded
 from graylog_mcp.redact import PACKS, PROFILES, Redactor
-from graylog_mcp.setup import clients, configfile, connect, doctor
+from graylog_mcp.setup import claude_trace, clients, configfile, connect, doctor
 from graylog_mcp.setup.detect import detect, local_timezone
 
 
@@ -758,6 +758,24 @@ def build_app(state: AdminState) -> Starlette:
         files = await asyncio.to_thread(clients.repoint_all, _shared_url(state), _folders())
         return JSONResponse({"ok": True, **done, "files": [str(f) for f in files]})
 
+    def _trace_view() -> dict[str, Any]:
+        return {
+            "enabled": claude_trace.traced("user", state.project_dir),
+            "path": str(claude_trace.settings_path("user", state.project_dir)),
+        }
+
+    async def get_trace(request: Request) -> Response:
+        return JSONResponse(await asyncio.to_thread(_trace_view))
+
+    async def set_trace(request: Request) -> Response:
+        """The Claude Code conversation hooks, in the user's settings: on or off."""
+        body = await _body(request)
+        try:
+            await asyncio.to_thread(claude_trace.set_trace, "user", state.project_dir, bool(body.get("enabled")))
+        except (ValueError, OSError) as exc:
+            return _err(str(exc))
+        return JSONResponse(await asyncio.to_thread(_trace_view))
+
     async def setup_autostart(request: Request) -> Response:
         from graylog_mcp.setup import service
 
@@ -869,6 +887,8 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/config/validate", validate_config, methods=["POST"]),
         Route("/api/setup", get_setup),
         Route("/api/setup/claude", setup_claude, methods=["POST"]),
+        Route("/api/setup/trace", get_trace),
+        Route("/api/setup/trace", set_trace, methods=["POST"]),
         Route("/api/setup/autostart", setup_autostart, methods=["POST"]),
         Route("/api/setup/start", setup_start, methods=["POST"]),
         Route("/api/setup/update", setup_update, methods=["POST"]),

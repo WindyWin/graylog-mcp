@@ -262,6 +262,7 @@ SUBCOMMANDS = (
     "serve", "start", "stop", "status", "update", "init", "login", "logout", "repo", "doctor", "detect", "install",
     "ui", "connect", "headers", "version",
     "keepalive",  # internal: what the login item runs on Windows and XDG desktops
+    "hook",  # internal: what Claude Code runs once 'install claude-code --trace' added the hooks
 )  # fmt: skip
 HELP = """\
 Getting started (one command, then everything happens in the browser):
@@ -729,6 +730,37 @@ def _detect(argv: list[str]) -> int:
     return 0
 
 
+def _install_trace(client: str, scope: str, project_dir: Path, enabled: bool, dry_run: bool) -> int:
+    from graylog_mcp.setup import claude_trace
+
+    if client != "claude-code":
+        print("graylog-mcp install: --trace and --untrace are for claude-code", file=sys.stderr)
+        return 2
+    try:
+        result = claude_trace.set_trace(scope, project_dir, enabled, dry_run)
+    except (ValueError, OSError) as exc:
+        print(f"graylog-mcp install: {exc}", file=sys.stderr)
+        return 2
+    if dry_run:
+        print(f"# would write to {result.path}" if result.changed else f"# {result.path} already says so")
+        print(json.dumps({"hooks": result.settings.get("hooks", {})}, indent=2))
+        return 0
+    what = "added the conversation hooks to" if enabled else "took the conversation hooks out of"
+    print(f"✓ Claude Code: {what} {result.path}" if result.changed else f"✓ Claude Code: {result.path} already says so")
+    if result.backup:
+        print(f"  previous file saved as {result.backup}")
+    if enabled and result.changed:
+        print("  sessions started from now on are grouped by conversation on the admin page's Activity screen")
+    return 0
+
+
+def _hook(argv: list[str]) -> int:
+    from graylog_mcp.setup import claude_trace
+
+    claude_trace.run_hook(sys.stdin.read() if not sys.stdin.isatty() else "")
+    return 0  # always: a failing hook would show an error in every Claude Code session
+
+
 def _install(argv: list[str]) -> int:
     from graylog_mcp.config import find_project_config
     from graylog_mcp.setup import clients, configfile, service
@@ -752,8 +784,19 @@ def _install(argv: list[str]) -> int:
     )
     parser.add_argument("--with-secrets", action="store_true", help="claude-desktop: copy current token values")
     parser.add_argument("--dry-run", action="store_true", help="print the entry, write nothing")
+    trace = parser.add_mutually_exclusive_group()
+    trace.add_argument(
+        "--trace",
+        action="store_const",
+        const=True,
+        dest="trace",
+        help="claude-code: add hooks that group its calls by conversation on the admin page (scope user by default)",
+    )
+    trace.add_argument("--untrace", action="store_const", const=False, dest="trace", help="take those hooks out")
     args = parser.parse_args(argv)
     project_dir = Path(args.project_dir).resolve()
+    if args.trace is not None:
+        return _install_trace(args.client, args.scope or "user", project_dir, args.trace, args.dry_run)
     config_file = Path(args.config).resolve() if args.config else find_project_config(project_dir)
     try:
         secrets = (
@@ -1326,6 +1369,7 @@ def main(argv: list[str] | None = None) -> int:
         "headers": _headers,
         "version": _version,
         "keepalive": _keepalive,
+        "hook": _hook,
     }
     return handlers[command](argv)
 

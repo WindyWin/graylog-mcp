@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import hashlib
 import inspect
 import time
 import uuid
@@ -24,17 +23,13 @@ from graylog_mcp.config import ConfigError
 from graylog_mcp.operations import Operation
 from graylog_mcp.shaping import dumps
 from graylog_mcp.tools import ToolInputError
+from graylog_mcp.usage_store import hashed
 
 PROCESS = uuid.uuid4().hex  # with stdio one process serves one client session
 MAX_CONVERSATIONS = 256  # conversations whose call count is kept, least recently used dropped
 PLAYGROUND = "playground"
 
 _seq: OrderedDict[str, int] = OrderedDict()
-
-
-def hashed(value: str) -> str:
-    """Ids from clients are stored as 12 hex characters: enough to group by, nothing to replay."""
-    return hashlib.sha256(value.encode("utf-8", "replace")).hexdigest()[:12]
 
 
 def _next_seq(conversation: str) -> int:
