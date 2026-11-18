@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from graylog_mcp import __version__, explorer, operations, recover, tools, usage
+from graylog_mcp import __version__, explorer, explorer_traces, operations, recover, tools, usage
 from graylog_mcp import secrets as secret_store
 from graylog_mcp import usage_conversations as conversations
 from graylog_mcp.client import GraylogError, QueryError
@@ -746,18 +746,19 @@ def build_app(state: AdminState) -> Starlette:
     explorer_ops = {
         "dashboard": (Operation("explorer_dashboard", explorer.dashboard), ("top",)),
         "messages": (Operation("explorer_messages", explorer.messages), ("limit", "offset")),
-        "traces": (Operation("explorer_traces", explorer.traces), ("limit",)),
-        "trace": (Operation("explorer_trace", explorer.trace), ()),
+        "traces": (Operation("explorer_traces", explorer_traces.traces), ("limit",)),
+        "trace": (Operation("explorer_trace", explorer_traces.trace), ()),
     }
     explorer_params = {"instance": "instance", "streams": "streams", "q": "query", "range": "range",
                        "from": "from_time", "to": "to_time"}  # fmt: skip
 
     async def explore(request: Request) -> Response:
-        """The log explorer's reads (``explorer.py``), recorded apart from the model's calls."""
+        """The log explorer's reads (``explorer.py``), recorded apart from the model's calls; ``refresh=1`` (the
+        page refreshing itself) is not recorded at all."""
         op, numbers = explorer_ops[request.url.path.rsplit("/api/explorer/", 1)[1].split("/", 1)[0]]
         params = request.query_params
         args: dict[str, Any] = {arg: params[name] for name, arg in explorer_params.items() if params.get(name)}
-        if op.fn is explorer.trace:
+        if op.fn is explorer_traces.trace:
             args.pop("query", None)
             args["trace_id"] = request.path_params["id"]
         for name in numbers:
@@ -767,7 +768,10 @@ def build_app(state: AdminState) -> Starlette:
                 except ValueError:
                     return _err(f"{name} must be a whole number")
         try:
-            result, _ = await run_recorded(op, state.app, RecordContext(source=EXPLORER), args)
+            if params.get("refresh") == "1":
+                result = await op.fn(await state.app(), **args)
+            else:
+                result, _ = await run_recorded(op, state.app, RecordContext(source=EXPLORER), args)
         except GraylogError as exc:  # Graylog's answer can quote the query: redacted like everything shown
             status = 400 if isinstance(exc, QueryError) else 502
             with contextlib.suppress(Exception):

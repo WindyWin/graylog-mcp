@@ -34,7 +34,7 @@ All notable changes to this project are documented here. The format follows
   errors, p50/p95/p99 latency and slow calls, all counted by Graylog over the whole range; pages of messages with
   how many match; the newest traces with their duration, services and first API; and one trace in order. Values
   are redacted and lists capped (500 messages, offset up to 10,000). These reads are recorded apart from the
-  model's calls.
+  model's calls, and the page's own refreshes (`refresh=1`) not at all.
 
 ### Changed
 - Each screen of the admin page has its own address (`/admin/activity/conversations/<id>?turn=<ms>`), so the

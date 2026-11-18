@@ -105,6 +105,9 @@ async def test_bad_requests_are_refused_and_reads_are_recorded_apart(explorer):
         bad_query = await client.get("/api/explorer/messages", params={"q": "level:(3", "range": "1h"})
         bad_number = await client.get("/api/explorer/messages", params={"limit": "many"})
         await client.get("/api/explorer/traces", params=Q)
+        refreshed = await client.get("/api/explorer/dashboard", params={**Q, "refresh": "1"})
+    assert refreshed.status_code == 200 and refreshed.json()["total"] == 10
+    assert not [c for c in store().read(0, 2e9) if c.get("tool") == "explorer_dashboard" and c.get("ok")]
     assert unknown.status_code == 400 and "nope" in unknown.json()["error"]
     assert bad_query.status_code == 400
     assert bad_number.status_code == 400 and "limit" in bad_number.json()["error"]

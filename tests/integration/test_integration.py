@@ -239,18 +239,18 @@ async def test_explorer_aggregations(app):
 
 async def test_log_explorer(app):
     """The admin page's explorer on the seeded logs (seed.py): no route field there, so no API table."""
-    from graylog_mcp import explorer
+    from graylog_mcp import explorer, explorer_traces
 
     board = await explorer.dashboard(app, range="40d")
     assert_clean(board)
     assert board["total"] >= 6096 and board["endpoints"] is None and board["fields"]["status"] == "http_status"
     assert {a["app"] for a in board["apps"]} >= {"gateway", "payment"} and board["status"]["2xx"] >= 1
     assert sum(b["count"] for b in board["histogram"]["buckets"]) == board["total"]
-    listing = await explorer.traces(app, range="40d", limit=5)
+    listing = await explorer_traces.traces(app, range="40d", limit=5)
     assert listing["traces"][0]["trace"] == "req-7f3a9c" and len(listing["traces"]) == 5
     newest = listing["traces"][0]
     assert newest["count"] == 6 and newest["duration_ms"] == 1000 and "payment" in newest["services"]
-    one = await explorer.trace(app, "req-7f3a9c", range="40d")
+    one = await explorer_traces.trace(app, "req-7f3a9c", range="40d")
     assert_clean(one)
     assert one["total"] == 6 and one["duration_ms"] == 1000 and one["messages"][0]["offset_ms"] == 0
     page = await explorer.messages(app, range="40d", limit=3, offset=3)

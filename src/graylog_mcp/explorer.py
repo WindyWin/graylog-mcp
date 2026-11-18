@@ -2,7 +2,8 @@
 
 Not a tool of the model: no output budget and no focus, but every value is redacted and every list capped. Each
 number comes from an aggregation over the whole range, never from a sample of messages. The API, status and latency
-fields are the instance's settings (``endpoint_fields``, ``status_fields``, ``latency_fields``).
+fields are the instance's settings (``endpoint_fields``, ``status_fields``, ``latency_fields``). Traces are in
+``explorer_traces``.
 """
 
 from __future__ import annotations
@@ -13,14 +14,12 @@ from typing import Any
 
 from graylog_mcp.backends import Graylog
 from graylog_mcp.backends.base import COUNT, AggResult, MessageQuery, Metric
-from graylog_mcp.setup.detect import NUMERIC_TYPES
 from graylog_mcp.timerange import TimeRange, choose_interval, parse_graylog_ts, resolve_range
 from graylog_mcp.tools import App, ToolInputError, escape_field, phrase
 
 MAX_LIMIT = 500
 MAX_WINDOW = 10_000  # offset + limit: OpenSearch's index.max_result_window by default
 MAX_TOP = 100
-MAX_TRACE_MESSAGES = 1000
 PARALLEL_PER_INSTANCE = 2  # explorer requests at once; the instance's max_concurrency still caps Graylog requests
 PERCENTILES = (50, 95, 99)
 
@@ -71,7 +70,7 @@ class Scope:
                 "fields": self.fields()}  # fmt: skip
 
 
-async def _scope(
+async def open_scope(
     app: App,
     instance: str | None,
     query: str | None,
@@ -89,19 +88,19 @@ async def _scope(
     return Scope(app, gl, (query or "").strip(), stream_ids, tr, await gl.field_names())
 
 
-def _gate(gl: Graylog) -> asyncio.Semaphore:
+def gate(gl: Graylog) -> asyncio.Semaphore:
     gate = _gates.get(gl)
     if gate is None:
         gate = _gates[gl] = asyncio.Semaphore(PARALLEL_PER_INSTANCE)
     return gate
 
 
-def _ms(value: Any) -> int | None:
+def epoch_ms(value: Any) -> int | None:
     ts = parse_graylog_ts(value)
     return int(ts.timestamp() * 1000) if ts else None
 
 
-def _any_of(field: str, values: list[Any]) -> str:
+def any_of(field: str, values: list[Any]) -> str:
     return f"{escape_field(field)}:({' OR '.join(phrase(v) for v in values)})"
 
 
@@ -132,9 +131,9 @@ async def dashboard(
 ) -> dict[str, Any]:
     """Messages per application and per status class, a histogram, and the busiest APIs with their errors,
     latency percentiles and slow calls."""
-    s = await _scope(app, instance, query, streams, range, from_time, to_time)
+    s = await open_scope(app, instance, query, streams, range, from_time, to_time)
     top = max(1, min(int(top), MAX_TOP))
-    async with _gate(s.gl):
+    async with gate(s.gl):
         total, apps, statuses, histogram, endpoints = await asyncio.gather(
             s.gl.count(s.where(), s.tr, s.streams),
             _apps(s),
@@ -155,7 +154,7 @@ async def _apps(s: Scope) -> list[dict[str, Any]] | None:
         return None
     every, business, technical = await asyncio.gather(
         s.aggregate(s.where(), [s.service], 20, [COUNT]),
-        s.aggregate(s.where(s.business), [s.service], 20, [COUNT]) if s.business else _nothing(),
+        s.aggregate(s.where(s.business), [s.service], 20, [COUNT]) if s.business else nothing(),
         s.aggregate(s.where(s.technical), [s.service], 20, [COUNT]),
     )
     bad, broken = _counts(business) if business else {}, _counts(technical)
@@ -166,7 +165,7 @@ async def _apps(s: Scope) -> list[dict[str, Any]] | None:
     ]  # fmt: skip
 
 
-async def _nothing() -> None:
+async def nothing() -> None:
     return None
 
 
@@ -185,11 +184,11 @@ async def _histogram(s: Scope) -> dict[str, Any]:
         s.gl.histogram(s.where(), s.tr, s.streams, interval),
         s.gl.histogram(s.where(s.technical), s.tr, s.streams, interval),
     )
-    bad = {_ms(r.keys[0]): int(r.values.get(COUNT.name) or 0) for r in errors.rows if r.keys}
+    bad = {epoch_ms(r.keys[0]): int(r.values.get(COUNT.name) or 0) for r in errors.rows if r.keys}
     buckets = [
         {"t": t, "count": int(r.values.get(COUNT.name) or 0), "errors": bad.get(t, 0)}
         for r in every.rows
-        if r.keys and (t := _ms(r.keys[0])) is not None
+        if r.keys and (t := epoch_ms(r.keys[0])) is not None
     ]
     return {"interval_s": secs, "buckets": sorted(buckets, key=lambda b: b["t"])}
 
@@ -207,11 +206,11 @@ async def _endpoints(s: Scope, top: int) -> dict[str, Any] | None:
         return {"rows": [], "more": False, "without_field": without}
     # the errors and slow calls of these APIs exactly: a top N of errors alone could name other APIs
     names = [r.keys[0] for r in rows]
-    shown = _any_of(s.endpoint, names)
+    shown = any_of(s.endpoint, names)
     slow = [(t, f"{escape_field(s.latency)}:>={t / s.latency_scale:g}") for t in s.gl.cfg.slow_ms] if s.latency else []
     queries = [s.business, s.technical, *(clause for _, clause in slow)]
     found = await asyncio.gather(*(
-        s.aggregate(s.where(clause, shown), [s.endpoint], len(names), [COUNT]) if clause else _nothing()
+        s.aggregate(s.where(clause, shown), [s.endpoint], len(names), [COUNT]) if clause else nothing()
         for clause in queries
     ))  # fmt: skip
     business, technical, *slow_counts = [_counts(r) if r else {} for r in found]
@@ -225,7 +224,7 @@ async def _endpoints(s: Scope, top: int) -> dict[str, Any] | None:
             "business_errors": business.get(key, 0) if s.business else None,
             "technical_errors": technical.get(key, 0),
             "error_pct": round(100 * errors / count, 1) if count else None,
-            "last_ts": _ms(r.values.get("max(timestamp)")),
+            "last_ts": epoch_ms(r.values.get("max(timestamp)")),
         }
         if s.latency:
             item["latency_ms"] = {
@@ -256,11 +255,11 @@ async def messages(
     offset: int = 0,
 ) -> dict[str, Any]:
     """The newest messages, every field redacted, with the number matching for "showing N of M"."""
-    s = await _scope(app, instance, query, streams, range, from_time, to_time)
+    s = await open_scope(app, instance, query, streams, range, from_time, to_time)
     limit, offset = max(1, min(int(limit), MAX_LIMIT)), int(offset)
     if offset < 0 or offset + limit > MAX_WINDOW:
         raise ToolInputError(f"offset + limit can be at most {MAX_WINDOW}; narrow the range or the query instead")
-    async with _gate(s.gl):
+    async with gate(s.gl):
         mq = MessageQuery(query=s.where(), timerange=s.tr, streams=s.streams, limit=limit, offset=offset)
         page = await s.gl.search(mq)
         total = page.total if page.total is not None else await s.gl.count(s.where(), s.tr, s.streams)
@@ -268,109 +267,4 @@ async def messages(
     out = s.header()
     out.update(total=total, offset=offset, limit=limit)
     out["messages"] = [shaper.message(m.fields, m.index, m.id, select=["*"]) for m in page.messages]
-    return out
-
-
-# --------------------------------------------------------------------------- traces
-
-
-async def traces(
-    app: App,
-    instance: str | None = None,
-    query: str | None = None,
-    streams: str | None = None,
-    range: str | None = "1h",
-    from_time: str | None = None,
-    to_time: str | None = None,
-    limit: int = 50,
-) -> dict[str, Any]:
-    """The newest traces: messages, duration (first to last message), worst level, services and first API."""
-    s = await _scope(app, instance, query, streams, range, from_time, to_time)
-    out = s.header()
-    if not s.trace:
-        out.update(traces=[], hint=f"none of the trace fields {list(s.gl.cfg.trace_fields)} is in these logs")
-        return out
-    limit = max(1, min(int(limit), MAX_LIMIT))
-    level = "level" if "level" in await s.gl.field_names() and await _numeric(s.gl, "level") else None
-    metrics = [COUNT, Metric("min", "timestamp"), Metric("max", "timestamp", sort="desc")]
-    if level:
-        metrics.append(Metric("min", level))  # syslog: the lower, the worse
-    async with _gate(s.gl):
-        newest = await s.aggregate(s.where(), [s.trace], limit, metrics)
-        rows = [r for r in newest.rows if r.keys and r.keys[0] is not None]
-        ids = [r.keys[0] for r in rows]
-        within = _any_of(s.trace, ids) if ids else None
-        services, endpoints = await asyncio.gather(
-            s.aggregate(s.where(within), [s.trace, s.service], max(len(ids), 20), [COUNT])
-            if s.service and ids else _nothing(),
-            s.aggregate(s.where(within), [s.trace, s.endpoint], max(len(ids), 20), [COUNT, Metric("min", "timestamp")])
-            if s.endpoint and ids else _nothing(),
-        )  # fmt: skip
-    per_service: dict[Any, list[Any]] = {}
-    for r in services.rows if services else []:
-        if None not in r.keys:
-            per_service.setdefault(r.keys[0], []).append(s.redact(s.service, r.keys[1]))
-    first_api: dict[Any, tuple[int, Any]] = {}
-    for r in endpoints.rows if endpoints else []:
-        at = _ms(r.values.get("min(timestamp)"))
-        if None not in r.keys and at is not None and (r.keys[0] not in first_api or at < first_api[r.keys[0]][0]):
-            first_api[r.keys[0]] = (at, r.keys[1])
-    found = []
-    for r in rows:
-        start, end = _ms(r.values.get("min(timestamp)")), _ms(r.values.get("max(timestamp)"))
-        key = r.keys[0]
-        found.append({
-            "trace": s.redact(s.trace, key),
-            "count": int(r.values.get(COUNT.name) or 0),
-            "first_ts": start,
-            "last_ts": end,
-            "duration_ms": end - start if start is not None and end is not None else None,
-            "worst_level": r.values.get(f"min({level})") if level else None,
-            "services": per_service.get(key, []),
-            "first_endpoint": s.redact(s.endpoint, first_api[key][1]) if key in first_api else None,
-        })  # fmt: skip
-    out["traces"] = found
-    return out
-
-
-async def _numeric(gl: Graylog, field: str) -> bool:
-    kind = next((f.get("type") for f in await gl.fields() if f.get("name") == field), None)
-    return kind is None or str(kind) in NUMERIC_TYPES
-
-
-async def trace(
-    app: App,
-    trace_id: str,
-    instance: str | None = None,
-    streams: str | None = None,
-    range: str | None = "24h",
-    from_time: str | None = None,
-    to_time: str | None = None,
-) -> dict[str, Any]:
-    """Every message of one trace, oldest first, with its offset from the first and its service."""
-    trace_id = (trace_id or "").strip()
-    if not trace_id:
-        raise ToolInputError("a trace id is required")
-    s = await _scope(app, instance, None, streams, range, from_time, to_time)
-    fields = [f for f in s.gl.cfg.trace_fields if f in await s.gl.field_names()] or list(s.gl.cfg.trace_fields)
-    query = " OR ".join(f"{escape_field(f)}:{phrase(trace_id)}" for f in fields)
-    async with _gate(s.gl):
-        mq = MessageQuery(query=query, timerange=s.tr, streams=s.streams, sort_order="asc", limit=MAX_TRACE_MESSAGES)
-        page = await s.gl.search(mq)
-        total = page.total if page.total is not None else await s.gl.count(query, s.tr, s.streams)
-    shaper = app.shaper(s.gl)
-    times = [_ms(m.fields.get("timestamp")) for m in page.messages]
-    start = next((t for t in times if t is not None), None)
-    end = next((t for t in reversed(times) if t is not None), None)
-    timeline = []
-    for m, t in zip(page.messages, times, strict=True):
-        service = next((m.fields[f] for f in s.gl.cfg.service_fields if m.fields.get(f) not in (None, "")), None)
-        timeline.append({
-            "offset_ms": t - start if t is not None and start is not None else None,
-            "service": s.redact(s.service, service),
-            **shaper.message(m.fields, m.index, m.id, select=["*"]),
-        })  # fmt: skip
-    out = s.header()
-    out.update(trace=s.redact(s.trace, trace_id), total=total, shown=len(timeline), messages=timeline)
-    out["duration_ms"] = end - start if start is not None and end is not None else None
     return out
