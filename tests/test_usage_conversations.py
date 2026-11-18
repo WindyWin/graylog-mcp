@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mimetypes
 import re
 import time
 
@@ -141,7 +142,9 @@ async def test_admin_lists_and_opens_conversations(admin):
         assert (await admin.get("/api/usage?source=all")).json()["totals"]["calls"] == 2
 
 
-async def test_every_view_of_the_page_has_its_own_address(admin):
+async def test_every_view_of_the_page_has_its_own_address(admin, monkeypatch):
+    # a Windows registry can map .js to text/plain; the page's own files keep their type anyway
+    monkeypatch.setattr(mimetypes, "guess_type", lambda *_a, **_k: ("text/plain", None))
     async with admin:
         paths = ("/", "/activity", "/activity/conversations/aaaaaaaaaaaa?turn=1", "/activity/calls?tool=x",
                  "/logs/traces?instance=main&from=2026-01-01T10:00:00Z&to=2026-01-01T11:00:00Z&trace=t1")  # fmt: skip
@@ -152,6 +155,8 @@ async def test_every_view_of_the_page_has_its_own_address(admin):
         (script,) = re.findall(r'src="(/assets/[^"]+\.js)"', page.text)
         loaded = await admin.get(script)
         assert loaded.status_code == 200 and loaded.headers["content-type"].startswith("text/javascript")
+        (sheet,) = re.findall(r'href="(/assets/[^"]+\.css)"', page.text)
+        assert (await admin.get(sheet)).headers["content-type"].startswith("text/css")
         assert (await admin.get("/assets/index.html")).status_code == 404  # only the built files
         assert (await admin.get("/assets/..%2Fapp.py")).status_code == 404
         beside = (await admin.get("/assets/../app.py")).text  # the page, never a file next to it

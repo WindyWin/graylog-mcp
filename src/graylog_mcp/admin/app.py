@@ -270,6 +270,7 @@ def _groups_view(config: Config | None, base_dir: Path, url: str | None = None) 
 # which the CSP forbids.
 ROOT_KEY = "graylog_mcp.admin_root"
 ROOT_MARK = "__GRAYLOG_MCP_ROOT__"
+ASSET_TYPES = {".js": "text/javascript", ".css": "text/css"}
 
 # The page is built from ui/ (Vite + Preact) into static/: index.html plus hashed files under assets/.
 # The only inline script sets the colour scheme before first paint; the CSP allows it by hash, taken from the
@@ -321,7 +322,8 @@ def build_app(state: AdminState) -> Starlette:
         file = static.joinpath("assets", name)
         if "/" in name or name.startswith(".") or not file.is_file():
             return Response("not found", status_code=404, media_type="text/plain")
-        kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        # mimetypes reads the Windows registry, which can name .js text/plain; with nosniff the page would not run
+        kind = ASSET_TYPES.get(Path(name).suffix) or mimetypes.guess_type(name)[0] or "application/octet-stream"
         return Response(
             file.read_bytes(), media_type=kind, headers={"Cache-Control": "public, max-age=31536000, immutable"}
         )
