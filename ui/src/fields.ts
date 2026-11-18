@@ -11,7 +11,37 @@ export const SETTING_META: Record<string, readonly [string, string, string]> = {
         "the first one present names the service",
     ],
     version_fields: ["Version fields", "list", "a new value marks a deploy"],
-    latency_fields: ["Latency fields (ms)", "list", "used by root_cause"],
+    latency_fields: [
+        "Latency fields",
+        "list",
+        "used by root_cause and the log explorer",
+    ],
+    endpoint_fields: [
+        "API fields",
+        "list",
+        "the first one present names the API; a route template beats a path with ids",
+    ],
+    status_fields: [
+        "HTTP status fields",
+        "list",
+        "the first one present holds the status code",
+    ],
+    business_error_query: [
+        "Business error query",
+        "text",
+        "empty: a status from 400 to 499",
+    ],
+    technical_error_query: [
+        "Technical error query",
+        "text",
+        "empty: a status from 500 to 599, or the error query",
+    ],
+    slow_ms: ["Slow call thresholds (ms)", "list", "e.g. 1000, 3000, 10000"],
+    latency_unit: [
+        "Latency unit",
+        "select:auto,ms,s",
+        "auto: ms, but seconds for request_time",
+    ],
     default_fields: ["Fields shown in search results", "list", ""],
     error_query: [
         "Error query",
@@ -97,6 +127,18 @@ export const SETTING_SECTIONS: [string, string, string[]][] = [
         ],
     ],
     ["Queries", "", ["error_query", "change_query", "message_lookup_range"]],
+    [
+        "Log explorer",
+        "How the API table reads your request logs",
+        [
+            "endpoint_fields",
+            "status_fields",
+            "latency_unit",
+            "slow_ms",
+            "business_error_query",
+            "technical_error_query",
+        ],
+    ],
     [
         "General",
         "Defaults and display",

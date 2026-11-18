@@ -3,7 +3,6 @@ import type { ComponentChildren } from "preact";
 import { api, errorText } from "../api";
 import {
     activityTab,
-    attempt,
     currentEnv,
     currentPage,
     envHealth,
@@ -14,15 +13,37 @@ import {
     loadErrors,
     loadLearned,
     openEnvByName,
-    rerun,
+    playgroundRuns,
+    range,
     toast,
     usage,
     state,
 } from "../store";
+import {
+    callHref,
+    convList,
+    convOpen,
+    conversationOf,
+    convShort,
+    isMiss,
+    loadConversationDetail,
+    loadConversations,
+    openCallInConversation,
+    setActivityTab,
+    statusOf,
+    syncActivityAddress,
+} from "../activity";
 import type { Call, LearnedRule, Usage } from "../scripts/types";
 import { revealRows } from "../scripts/motion";
-import { Chart } from "./Charts";
-import { callWhat } from "./Overview";
+import { ActivityDashboard } from "./ActivityDashboard";
+import {
+    StatusBadge,
+    askText,
+    fmtMs,
+    plainClick,
+    playCall,
+} from "./ActivityParts";
+import { Conversations } from "./Conversations";
 import {
     AsyncButton,
     ContextChip,
@@ -38,23 +59,10 @@ import {
     num,
     whenShort,
 } from "./UI";
-const fmtMs = (ms: number) =>
-    ms >= 10000 ? `${Math.round(ms / 1000)}s` : `${num(ms)}ms`;
 const bucketIndex = (c: Call, u: Usage) =>
     u.buckets.length
         ? Math.floor((c.ts - u.buckets[0].t) / (u.bucket_hours * 3600))
         : -1;
-const bucketLabel = (t: number, step: number) =>
-    step >= 6
-        ? new Date(t * 1000).toLocaleString([], {
-              weekday: "short",
-              hour: "2-digit",
-              minute: "2-digit",
-          })
-        : new Date(t * 1000).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-          });
 function bucketSpan(u: Usage, i: number) {
     if (!u.buckets[i]) return "";
     const a = new Date(u.buckets[i].t * 1000),
@@ -69,8 +77,8 @@ function matches(c: Call, u: Usage) {
     if (bi < 0 || bi >= u.buckets.length) return false;
     if (currentEnv.value && c.instance !== currentEnv.value) return false;
     if (f.tool && c.tool !== f.tool) return false;
-    if (f.status === "error" && c.ok) return false;
-    if (f.status === "nothing" && !(c.ok && c.results === 0)) return false;
+    if (f.status === "error" && (c.ok || c.status === "running")) return false;
+    if (f.status === "nothing" && !isMiss(c)) return false;
     if (f.bucket !== null && bi !== f.bucket) return false;
     return (
         !f.q ||
@@ -78,13 +86,6 @@ function matches(c: Call, u: Usage) {
             .toLowerCase()
             .includes(f.q)
     );
-}
-function play(c: Call) {
-    toast(
-        `Playground pre-filled: ${c.tool}${c.instance ? ` on ${c.instance}` : ""}`,
-        "info",
-    );
-    return rerun(c);
 }
 function CallRow({
     c,
@@ -104,13 +105,9 @@ function CallRow({
         if (!on) setOpen(false);
     }, [on]);
     useEffect(() => () => clearTimeout(timer.current), []);
-    const w = callWhat(c),
-        a = c.args || {},
-        p = c.params || {},
-        ask =
-            (w !== "-" ? w : p.range ? `last ${p.range}` : "-") +
-            (a.group_by && w !== a.group_by ? ` · by ${a.group_by}` : ""),
-        miss = c.ok && c.results === 0,
+    const ask = askText(c),
+        miss = isMiss(c),
+        status = statusOf(c),
         env = instances.value.find((e) => e.name === c.instance);
     const kv: [string, ComponentChildren][] = [
         ["when", new Date(c.ts * 1000).toLocaleString()],
@@ -126,7 +123,8 @@ function CallRow({
         if (c.requests !== undefined) kv.push(["requests", String(c.requests)]);
         if (c.returned !== undefined && c.results !== undefined)
             kv.push(["returned", `${num(c.returned)} of ${num(c.results)}`]);
-    } else kv.push(["outcome", `error · ${c.error || "unknown"}`]);
+    } else if (status === "running") kv.push(["outcome", "still running"]);
+    else kv.push(["outcome", `${status} · ${c.error || "unknown"}`]);
     const copy = async () => {
         try {
             const entry = {
@@ -170,7 +168,10 @@ function CallRow({
                     aria-controls={`cd${index}`}
                     onClick={() => setOpen(!open)}
                     onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
+                        if (
+                            (e.key === "Enter" || e.key === " ") &&
+                            e.target === e.currentTarget
+                        ) {
                             e.preventDefault();
                             setOpen(!open);
                         }
@@ -184,11 +185,24 @@ function CallRow({
                     </span>
                     <span class="ctool">{c.tool}</span>
                     <span class="cenv">{c.instance || ""}</span>
+                    <a
+                        class="cconv"
+                        href={callHref(c)}
+                        title="Open this call in its conversation"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (!plainClick(e)) return;
+                            e.preventDefault();
+                            openCallInConversation(c);
+                        }}
+                    >
+                        {convShort(conversationOf(c))}
+                    </a>
                     <span class="cwhat" title={ask}>
                         {ask}
                     </span>
                     <span class="cst">
-                        {!c.ok && <span class="badge fail">✕ error</span>}
+                        {status !== "ok" && <StatusBadge status={status} />}
                         {miss && <span class="badge warn">found nothing</span>}
                         {c.rewritten && (
                             <span
@@ -240,7 +254,7 @@ function CallRow({
                             <div class="dact">
                                 <button
                                     class="btn primary"
-                                    onClick={() => play(c)}
+                                    onClick={() => playCall(c)}
                                 >
                                     Open in Playground{" "}
                                     <span class="kbd">P</span>
@@ -249,6 +263,7 @@ function CallRow({
                                     {copied ? "Copied ✓" : "Copy as JSON"}
                                 </button>
                                 {!c.ok &&
+                                    status !== "running" &&
                                     env?.local &&
                                     envHealth(env).cls === "fail" && (
                                         <button
@@ -363,30 +378,44 @@ export function Activity() {
     const u = usage.value,
         f = filters.value,
         tab = activityTab.value,
+        page = currentPage.value,
         l = learned.value,
         rules = (l?.rules || []).filter(
             (r) => !currentEnv.value || r.instance === currentEnv.value,
         ),
         refs = useRef(new Map<number, HTMLDivElement>()),
         list = useRef<HTMLDivElement>(null),
+        rangeOf = useRef<number | null>(null),
         shown = u ? u.recent.filter((c) => matches(c, u)).length : 0;
-    const set = (patch: Partial<typeof f>) => {
+    const set = (
+        patch: Partial<typeof f>,
+        how: "push" | "replace" = "push",
+    ) => {
         filters.value = { ...filters.value, ...patch };
+        syncActivityAddress(how);
     };
     useEffect(() => {
-        if (currentPage.value === "activity" && state.value) void loadLearned();
-    }, [currentPage.value, !!state.value]);
+        if (page === "activity" && state.value) void loadLearned();
+    }, [page, !!state.value]);
+    // the Overview counts the model's calls only: entering or leaving Activity with Playground runs on loads again
     useEffect(() => {
-        if (u) {
-            const bucket =
-                f.bucket !== null && f.bucket < u.buckets.length
+        if (state.value && (page === "activity" || page === "home"))
+            void loadDashboard(false);
+    }, [page, playgroundRuns.value, !!state.value]);
+    // the range picker is shared with the Overview, which writes no address of its own
+    useEffect(() => syncActivityAddress("push"), [range.value]);
+    // a new load: the filters that point into what is no longer listed are dropped
+    useEffect(() => {
+        if (!u) return;
+        const sameRange = rangeOf.current === u.range_hours,
+            bucket =
+                f.bucket !== null && f.bucket < u.buckets.length && sameRange
                     ? f.bucket
-                    : null;
-            set({
-                bucket,
-                tool: u.tools.some((t) => t.tool === f.tool) ? f.tool : "",
-            });
-        }
+                    : null,
+            tool = u.tools.some((t) => t.tool === f.tool) ? f.tool : "";
+        rangeOf.current = u.range_hours;
+        if (bucket !== f.bucket || tool !== f.tool)
+            set({ bucket, tool }, "replace");
     }, [u]);
     useLayoutEffect(() => {
         if (list.current && u)
@@ -431,28 +460,50 @@ export function Activity() {
                 entries[next]?.el?.scrollIntoView({ block: "nearest" });
             } else if (k === "p") {
                 e.preventDefault();
-                if (cur >= 0) void play(entries[cur].c);
+                if (cur >= 0) void playCall(entries[cur].c);
                 else toast("Select a call first with J / K", "info");
             }
         };
         document.addEventListener("keydown", key);
         return () => document.removeEventListener("keydown", key);
     }, []);
-    const pick = (i: number) =>
-        set({ bucket: filters.value.bucket === i ? null : i });
-    const max = Math.max(1, ...(u?.tools || []).map((t) => t.calls)),
-        kept = u?.recent.length || 0;
+    const kept = u?.recent.length || 0,
+        all = u?.total_recent ?? kept;
     return (
         <Page
             id="activity"
             tools={
                 <>
                     <ContextChip id="actCtx" />
-                    <Range />
+                    <label
+                        class="check small"
+                        title="The admin's own runs from the Playground, apart from the model's calls by default"
+                    >
+                        <input
+                            type="checkbox"
+                            id="actPlay"
+                            checked={playgroundRuns.value}
+                            onChange={(e) => {
+                                playgroundRuns.value = e.currentTarget.checked;
+                                syncActivityAddress("push");
+                            }}
+                        />
+                        Playground runs
+                    </label>
+                    {/* the conversations have a range of their own, what was learned has none */}
+                    {(tab === "dashboard" || tab === "calls") && <Range />}
                     <Refresh
                         id="actRefresh"
                         run={() =>
-                            Promise.all([loadDashboard(), loadLearned()])
+                            Promise.all([
+                                loadDashboard(),
+                                loadLearned(),
+                                tab === "conversations"
+                                    ? convOpen.value
+                                        ? loadConversationDetail()
+                                        : loadConversations(true)
+                                    : null,
+                            ])
                         }
                     />
                 </>
@@ -470,93 +521,28 @@ export function Activity() {
                     </div>
                 )}
             </div>
-            <section class="card" aria-labelledby="actChartTitle">
-                <div class="card-head">
-                    <h2 id="actChartTitle">Calls</h2>
-                    <span class="muted small mono" id="callsSub">
-                        {u &&
-                            `${num(u.totals.calls)} calls · ${num(u.totals.misses)} found nothing · ${num(u.totals.errors)} errors · per ${u.bucket_hours === 1 ? "hour" : `${u.bucket_hours} hours`}${currentEnv.value ? " · every environment" : ""}`}
-                    </span>
-                    <span class="spacer" />
-                    <span class="muted small">
-                        click a bar to filter the list
-                    </span>
-                </div>
-                {!u ? (
-                    <div id="callsChart">
-                        {loadErrors.value.usage ? (
-                            <div class="inline-msg">
-                                Could not load the calls:{" "}
-                                {loadErrors.value.usage}. Press Refresh to try
-                                again.
-                            </div>
-                        ) : (
-                            <Skeleton />
-                        )}
-                    </div>
-                ) : !u.totals.calls ? (
-                    <div id="callsChart">
-                        <div class="inline-msg">
-                            {u.enabled
-                                ? "No tool calls in this range yet. They show up here as soon as Claude uses graylog."
-                                : "Nothing is recorded."}
-                        </div>
-                    </div>
-                ) : (
-                    <Chart
-                        id="callsChart"
-                        labels={u.buckets.map((b) =>
-                            bucketLabel(b.t, u.bucket_hours),
-                        )}
-                        name="Tool calls"
-                        height={220}
-                        series={[
-                            {
-                                name: "Found something",
-                                values: u.buckets.map(
-                                    (b) => b.calls - b.misses - b.errors,
-                                ),
-                                color: "var(--chart-ink)",
-                            },
-                            {
-                                name: "Found nothing",
-                                values: u.buckets.map((b) => b.misses),
-                                color: "var(--chart-warn)",
-                            },
-                            {
-                                name: "Error",
-                                values: u.buckets.map((b) => b.errors),
-                                color: "var(--color-error)",
-                            },
-                        ]}
-                        selected={f.bucket}
-                        pick={pick}
-                    />
-                )}
-            </section>
             <Tabs
                 id="actTabs"
                 label="Activity views"
                 value={tab}
-                onChange={(t) => {
-                    activityTab.value = t;
-                }}
+                onChange={(t) => setActivityTab(t)}
                 options={[
+                    ["dashboard", "Dashboard"],
+                    [
+                        "conversations",
+                        <>
+                            Conversations
+                            <span class="n" id="nConvs">
+                                {convList.value?.total ?? ""}
+                            </span>
+                        </>,
+                    ],
                     [
                         "calls",
                         <>
                             Calls
                             <span class="n" id="nCalls">
-                                {shown}
-                            </span>
-                        </>,
-                    ],
-                    [
-                        "tools",
-                        <>
-                            By tool
-                            <span class="n" id="nTools">
-                                {u?.tools.length || ""}
+                                {u ? shown : ""}
                             </span>
                         </>,
                     ],
@@ -571,6 +557,12 @@ export function Activity() {
                     ],
                 ]}
             />
+            <Panel tabs="actTabs" id="dashboard" value={tab}>
+                <ActivityDashboard />
+            </Panel>
+            <Panel tabs="actTabs" id="conversations" value={tab}>
+                <Conversations />
+            </Panel>
             <Panel tabs="actTabs" id="calls" value={tab}>
                 <div class="fbar">
                     <label class="search">
@@ -583,7 +575,10 @@ export function Activity() {
                             aria-label="Filter calls"
                             value={f.q}
                             onInput={(e) =>
-                                set({ q: e.currentTarget.value.toLowerCase() })
+                                set(
+                                    { q: e.currentTarget.value.toLowerCase() },
+                                    "replace",
+                                )
                             }
                         />
                     </label>
@@ -638,14 +633,14 @@ export function Activity() {
                                 f.bucket !== null
                             )
                         }
-                        onClick={() => {
-                            filters.value = {
+                        onClick={() =>
+                            set({
                                 q: "",
                                 tool: "",
                                 status: "all",
                                 bucket: null,
-                            };
-                        }}
+                            })
+                        }
                     >
                         Clear filters
                     </button>
@@ -653,7 +648,7 @@ export function Activity() {
                 <div class="cmeta">
                     <span id="acount" aria-live="polite">
                         {u &&
-                            `Showing ${num(shown)} of ${num(kept)} kept calls${u.totals.calls > kept ? ` · ${num(u.totals.calls)} in this range, the latest ${kept} are kept` : ""}`}
+                            `Showing ${num(shown)} of the latest ${num(kept)} calls${all > kept ? ` · ${num(all)} in this range` : ""}`}
                     </span>
                     <span class="spacer" />
                     <span class="keyhint">
@@ -666,8 +661,9 @@ export function Activity() {
                     <span>When</span>
                     <span>Tool</span>
                     <span>Environment</span>
+                    <span>Conversation</span>
                     <span>Asked for</span>
-                    <span />
+                    <span>Status</span>
                     <span>Time</span>
                     <span>Found</span>
                 </div>
@@ -687,7 +683,7 @@ export function Activity() {
                         />
                     ))}
                 </div>
-                <div class="allclear" id="aempty" hidden={shown > 0}>
+                <div class="allclear" id="aempty" hidden={!u || shown > 0}>
                     {!kept
                         ? "// no calls recorded in this range yet"
                         : u &&
@@ -697,102 +693,6 @@ export function Activity() {
                             )
                           ? `// no details kept for ${bucketSpan(u, f.bucket)}: the list keeps only the latest ${kept} calls`
                           : "// no call matches these filters"}
-                </div>
-            </Panel>
-            <Panel tabs="actTabs" id="tools" value={tab}>
-                <div id="toolTable">
-                    {u?.tools.length ? (
-                        <>
-                            <div class="cmeta">
-                                <span>
-                                    counts cover every call in the range
-                                    {currentEnv.value
-                                        ? ", in every environment"
-                                        : ""}{" "}
-                                    · click a tool to list its calls
-                                </span>
-                            </div>
-                            <div class="trow head" aria-hidden="true">
-                                <span>Tool</span>
-                                <span class="bar-cell" />
-                                <span class="num">Calls</span>
-                                <span class="num">Found nothing</span>
-                                <span class="num">Errors</span>
-                                <span class="num lat">Median</span>
-                                <span class="num lat">p95</span>
-                            </div>
-                            {u.tools.map((t) => (
-                                <div
-                                    class="trow go"
-                                    role="button"
-                                    tabIndex={0}
-                                    aria-label={`${t.tool}: ${t.calls} calls. Show them in the list.`}
-                                    onClick={() => {
-                                        set({ tool: t.tool });
-                                        activityTab.value = "calls";
-                                    }}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                            set({ tool: t.tool });
-                                            activityTab.value = "calls";
-                                        }
-                                    }}
-                                >
-                                    <span class="tn">{t.tool}</span>
-                                    <span class="bar-cell">
-                                        <span class="track">
-                                            <span
-                                                class="fill"
-                                                style={{
-                                                    transform: `scaleX(${t.calls / max})`,
-                                                }}
-                                            >
-                                                <i
-                                                    style={{
-                                                        flex: Math.max(
-                                                            0,
-                                                            t.calls -
-                                                                t.misses -
-                                                                t.errors,
-                                                        ),
-                                                    }}
-                                                />
-                                                <i
-                                                    class="m"
-                                                    style={{ flex: t.misses }}
-                                                />
-                                                <i
-                                                    class="e"
-                                                    style={{ flex: t.errors }}
-                                                />
-                                            </span>
-                                        </span>
-                                    </span>
-                                    <span class="num">{num(t.calls)}</span>
-                                    <span
-                                        class={`num${t.misses ? " warn" : ""}`}
-                                    >
-                                        {num(t.misses)}
-                                    </span>
-                                    <span
-                                        class={`num${t.errors ? " bad" : ""}`}
-                                    >
-                                        {num(t.errors)}
-                                    </span>
-                                    <span class="num lat">
-                                        {t.p50_ms ? fmtMs(t.p50_ms) : "-"}
-                                    </span>
-                                    <span class="num lat">
-                                        {t.p95_ms ? fmtMs(t.p95_ms) : "-"}
-                                    </span>
-                                </div>
-                            ))}
-                        </>
-                    ) : (
-                        <div class="allclear">
-                            // no tool called in this range yet
-                        </div>
-                    )}
                 </div>
             </Panel>
             <Panel tabs="actTabs" id="learned" value={tab}>

@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import {
-    activityTab,
     currentPage,
     density,
     detectRequest,

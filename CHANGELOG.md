@@ -48,7 +48,7 @@ All notable changes to this project are documented here. The format follows
 - Admin Overview: an "Inside <environment>" section breaks one environment down by service (with its errors), by level
   and by exception type, from the new read-only `GET /api/breakdown`. Every row opens a log drawer with the lines
   behind its number: filter to errors, narrow with a query, load more, open a line to see every field, follow its
-  trace id or read the lines around it, and carry the search to the Playground.
+  trace id or read the lines around it, and carry the search to the Playground or to the Logs screen.
 - Admin Overview: the older figures open their log lines too. A point on Log volume or a bar on Errors opens that hour
   (or 6 hours), the Log messages and Errors tiles open every line or every error line, the counts on an environment row
   open that environment's lines, and the Tool calls and Found something tiles open Activity. The drawer can switch

@@ -13,6 +13,7 @@ import {
 import { Shell } from "./components/Shell";
 import { Overview } from "./components/Overview";
 import { Activity } from "./components/Activity";
+import { Logs } from "./components/Logs";
 import { Environments } from "./components/Environments";
 import { LogFields } from "./components/LogFields";
 import { Redaction } from "./components/Redaction";
@@ -48,6 +49,7 @@ function App() {
         >
             <Overview />
             <Activity />
+            <Logs />
             <Environments />
             <LogFields />
             <Redaction />

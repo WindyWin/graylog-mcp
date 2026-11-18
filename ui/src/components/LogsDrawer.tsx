@@ -10,6 +10,7 @@ import {
     openLogs,
     phrase,
 } from "../logs";
+import { openInLogs } from "../explorer-store";
 import type { Fields, LogLine } from "../scripts/types";
 import { revealRows } from "../scripts/motion";
 import { AsyncButton, Close, Dialog, Icon, Segment, num } from "./UI";
@@ -426,6 +427,25 @@ export function LogsDrawer() {
                     }}
                 >
                     Open in Playground
+                </button>
+                <button
+                    class="btn sm ghost"
+                    id="logsExplore"
+                    title="Read these lines on the Logs screen"
+                    onClick={() => {
+                        if (!view) return;
+                        const v = view;
+                        close();
+                        void openInLogs({
+                            instance: v.instance,
+                            query: searchArgs(v, narrow).query,
+                            range: v.range,
+                            from: v.from,
+                            to: v.to,
+                        });
+                    }}
+                >
+                    Open in Logs
                 </button>
             </div>
             <div class="logs-list" id="logsList" ref={list}>

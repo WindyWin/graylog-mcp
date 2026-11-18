@@ -1,5 +1,13 @@
 import { signal, computed } from "@preact/signals";
 import type { State, Setup, Check, ScopeInfo } from "./scripts/types";
+import {
+    applyRoute,
+    pagePath,
+    pathOf,
+    readRoute,
+    setAddress,
+    type How,
+} from "./router";
 
 // Creating state is safe without a DOM. Browser initialization belongs to mount effects.
 export const token = signal("");
@@ -74,7 +82,9 @@ export const filters = signal<{
     status: string;
     bucket: number | null;
 }>({ q: "", tool: "", status: "all", bucket: null });
-export const activityTab = signal("calls");
+export const activityTab = signal("dashboard");
+// Activity adds the admin's own Playground runs when asked; the Overview counts the model's calls only
+export const playgroundRuns = signal(false);
 export interface Dirty {
     what: string;
     save: () => unknown;
@@ -127,6 +137,10 @@ export const pages = {
     activity: [
         "Activity",
         "Every tool call the model made: what it asked, what it found, how long it took",
+    ],
+    logs: [
+        "Logs",
+        "Request logs per API, traces and messages, read from Graylog with the same redaction",
     ],
     envs: [
         "Environments",
@@ -198,14 +212,19 @@ export function setEnv(name: string | null) {
     currentEnv.value = name;
     storage.set("gm-env", name);
 }
-export async function navigate(name: string): Promise<boolean> {
-    const aliases: Record<string, string> = {
-        overview: "home",
-        groups: "envs",
-        settings: "fields",
-        clients: "connect",
-    };
-    name = aliases[name] || name;
+const OLD_PAGES: Record<string, string> = {
+    overview: "home",
+    groups: "envs",
+    settings: "fields",
+    clients: "connect",
+};
+// how: "push" adds a history entry, "replace" changes the current one, "none" when the address already changed
+// (Back or Forward)
+export async function navigate(
+    name: string,
+    how: How = "push",
+): Promise<boolean> {
+    name = OLD_PAGES[name] || name;
     if (!(name in pages)) name = "home";
     if (name !== currentPage.value && dirty.value) {
         if (
@@ -216,7 +235,8 @@ export async function navigate(name: string): Promise<boolean> {
                 true,
             ))
         ) {
-            history.replaceState(null, "", `#${currentPage.value}`);
+            // Back was pressed: the address goes back to the screen still open
+            if (how === "none") setAddress(pagePath(currentPage.value), "push");
             return false;
         }
         const d = dirty.value;
@@ -224,8 +244,14 @@ export async function navigate(name: string): Promise<boolean> {
         d.discard();
     }
     currentPage.value = name;
-    history.replaceState(null, "", `#${name}`);
+    setAddress(pagePath(name), how);
     return true;
+}
+// Back and Forward: show what the address says
+export function followAddress() {
+    const r = readRoute();
+    applyRoute(r);
+    void navigate(r.page, "none");
 }
 export function openEnv(e: Instance | null, group?: string) {
     if (e && !e.local) {
@@ -279,40 +305,56 @@ export async function runDoctor() {
         toast(errorText(e), "fail");
     }
 }
-let dashboardSeq = 0;
-export async function loadDashboard() {
-    const seq = ++dashboardSeq,
-        r = range.value;
-    usage.value = null;
-    stats.value = null;
-    setLoadError("usage");
-    setLoadError("stats");
-    await Promise.all([
-        api<Usage>(`/api/usage?range=${r}`)
-            .then((v) => {
-                if (seq === dashboardSeq) usage.value = v;
-            })
-            .catch((e) => {
-                if (seq === dashboardSeq) {
+export const usageSource = () =>
+    currentPage.value === "activity" && playgroundRuns.value ? "all" : "mcp";
+// what was last asked for, so that without force only a change of range or source loads again
+let usageSeq = 0,
+    statsSeq = 0,
+    usageKey = "",
+    statsKey = "";
+export async function loadDashboard(force = true) {
+    const r = range.value,
+        source = usageSource(),
+        key = `${r}|${source}`,
+        jobs: Promise<void>[] = [];
+    if (force || usageKey !== key) {
+        const seq = ++usageSeq;
+        usageKey = key;
+        usage.value = null;
+        setLoadError("usage");
+        jobs.push(
+            api<Usage>(`/api/usage?range=${r}&source=${source}`)
+                .then((v) => {
+                    if (seq === usageSeq) usage.value = v;
+                })
+                .catch((e) => {
+                    if (seq !== usageSeq) return;
+                    usageKey = "";
                     setLoadError("usage", e);
                     toast(errorText(e), "fail");
-                }
-            }),
-        ...(instances.value.length
-            ? [
-                  api<LogStats>(`/api/logstats?range=${r}`)
-                      .then((v) => {
-                          if (seq === dashboardSeq) {
-                              stats.value = v;
-                              statsAt.value = Date.now();
-                          }
-                      })
-                      .catch((e) => {
-                          if (seq === dashboardSeq) setLoadError("stats", e);
-                      }),
-              ]
-            : []),
-    ]);
+                }),
+        );
+    }
+    if ((force || statsKey !== r) && instances.value.length) {
+        const seq = ++statsSeq;
+        statsKey = r;
+        stats.value = null;
+        setLoadError("stats");
+        jobs.push(
+            api<LogStats>(`/api/logstats?range=${r}`)
+                .then((v) => {
+                    if (seq !== statsSeq) return;
+                    stats.value = v;
+                    statsAt.value = Date.now();
+                })
+                .catch((e) => {
+                    if (seq !== statsSeq) return;
+                    statsKey = "";
+                    setLoadError("stats", e);
+                }),
+        );
+    }
+    await Promise.all(jobs);
 }
 export async function loadLearned() {
     try {
@@ -334,12 +376,13 @@ export async function rerun(c: import("./scripts/types").Call) {
         },
     };
 }
-export async function openProblems() {
-    if (await navigate("activity")) {
-        filters.value = { q: "", tool: "", status: "nothing", bucket: null };
-        activityTab.value = "calls";
-    }
+// the filters are set first so that the address navigate writes is the one of the list shown
+export async function openCalls(status = "all") {
+    filters.value = { q: "", tool: "", status, bucket: null };
+    activityTab.value = "calls";
+    await navigate("activity");
 }
+export const openProblems = () => openCalls("nothing");
 export function initStore() {
     currentEnv.value = storage.get("gm-env");
     const d = document.documentElement.dataset;
@@ -347,12 +390,13 @@ export function initStore() {
     mode.value = d.mode || "system";
     theme.value = d.theme || "light";
     density.value = d.density || "comfortable";
-    const aliases: Record<string, string> = {
-        overview: "home",
-        groups: "envs",
-        settings: "fields",
-        clients: "connect",
-    };
-    const start = aliases[location.hash.slice(1)] || location.hash.slice(1);
-    currentPage.value = start in pages ? start : "home";
+    // an address of earlier versions (#activity) becomes the screen's own
+    const old = location.hash.slice(1);
+    if (old && !old.includes("="))
+        history.replaceState(null, "", pathOf(OLD_PAGES[old] || old));
+    const r = readRoute();
+    applyRoute(r);
+    const page = OLD_PAGES[r.page] || r.page;
+    currentPage.value = page in pages ? page : "home";
+    setAddress(pagePath(currentPage.value), "replace");
 }

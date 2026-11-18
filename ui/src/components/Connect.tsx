@@ -267,6 +267,77 @@ export function Connect() {
                 </div>
                 <pre id="ccCommand">{data?.["claude-code-command"]}</pre>
             </div>
+            <TraceCard hidden={selected?.key !== "claude-code"} />
         </Page>
+    );
+}
+type TraceHooks = { enabled: boolean; path: string };
+function TraceCard({ hidden }: { hidden: boolean }) {
+    const [hooks, setHooks] = useState<TraceHooks | null>(null),
+        [error, setError] = useState("");
+    useEffect(() => {
+        if (currentPage.value !== "connect" || !state.value) return;
+        let live = true;
+        void api<TraceHooks>("/api/setup/trace")
+            .then((r) => {
+                if (live) {
+                    setHooks(r);
+                    setError("");
+                }
+            })
+            .catch((e) => {
+                if (live) setError(errorText(e));
+            });
+        return () => {
+            live = false;
+        };
+    }, [currentPage.value, !!state.value]);
+    return (
+        <div class="card" id="trCard" hidden={hidden}>
+            <div class="card-head">
+                <h2>Group calls by conversation</h2>
+                <span class="spacer" />
+                <span id="trState">
+                    {error ? (
+                        <span class="badge fail">not loaded</span>
+                    ) : hooks ? (
+                        <span class={hooks.enabled ? "badge ok" : "badge"}>
+                            {hooks.enabled ? "on" : "off"}
+                        </span>
+                    ) : null}
+                </span>
+                <AsyncButton
+                    class="btn sm"
+                    id="trToggle"
+                    disabled={!hooks}
+                    run={async () => {
+                        if (!hooks) return;
+                        const r = await api<TraceHooks>(
+                            "/api/setup/trace",
+                            "POST",
+                            { enabled: !hooks.enabled },
+                        );
+                        setHooks(r);
+                        toast(
+                            r.enabled
+                                ? "Hooks added: new sessions are grouped by conversation"
+                                : "Hooks taken out",
+                        );
+                    }}
+                >
+                    {hooks?.enabled ? "Turn off" : "Turn on"}
+                </AsyncButton>
+            </div>
+            <div class="muted small">
+                Claude Code does not tell the server which conversation a call
+                belongs to. Two hooks in your Claude Code settings do: they
+                record the session, the subagent and when you asked, as hashed
+                ids (never the prompt's text), so Activity groups calls by
+                conversation and turn. Applies to sessions started afterwards.
+            </div>
+            <div class="muted small mono anywhere mt-xs" id="trPath">
+                {error || hooks?.path}
+            </div>
+        </div>
     );
 }

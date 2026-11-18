@@ -144,6 +144,36 @@ export interface ToolStat {
     misses: number;
     p50_ms: number;
     p95_ms: number;
+    truncated?: number;
+    last_ts?: number;
+    slow?: Record<string, number>; // calls at least this many ms long, by "1000", "3000", "10000"
+}
+export interface InstanceStat {
+    instance: string | null;
+    calls: number;
+    errors: number;
+    misses: number;
+}
+
+/** One request a call sent to Graylog; times in ms from the start of the call. */
+export interface Span {
+    method?: string;
+    path?: string;
+    query?: string;
+    status?: number | string | null; // an HTTP status, or why no answer came ("timeout")
+    start_ms?: number;
+    ms?: number;
+    wait_ms?: number;
+    attempts?: number;
+}
+/** What is kept of a call's requests once their detail is dropped. */
+export interface SpanSummary {
+    n: number;
+    total_ms: number;
+    wait_ms: number;
+    failed: number;
+    slowest?: { path: string | null; ms: number };
+    dropped?: number;
 }
 
 /** One recorded tool call. */
@@ -157,6 +187,22 @@ export interface Call {
     args?: Fields;
     params?: Fields;
     error?: string;
+    status?: string; // ok, error, refused, cancelled, running or interrupted
+    call_id?: string;
+    conversation?: string;
+    seq?: number;
+    agent?: string;
+    agent_type?: string;
+    client?: string;
+    repo?: string;
+    chars?: number;
+    truncated?: boolean;
+    requests?: number;
+    preview?: string;
+    preview_truncated?: boolean;
+    spans?: Span[];
+    spans_dropped?: number;
+    span_summary?: SpanSummary;
     [more: string]: any;
 }
 
@@ -166,10 +212,48 @@ export interface Usage {
     bucket_hours: number;
     buckets: Bucket[];
     tools: ToolStat[];
+    instances?: InstanceStat[];
     totals: Totals;
     previous: Totals;
     misses: Call[];
     recent: Call[];
+    total_recent?: number;
+}
+
+// /api/conversations: one row per turn, "cold" rows are what is left of a conversation older than detail_days
+export interface TurnRow {
+    conversation: string;
+    turn: string | null;
+    first_ts: number;
+    last_ts: number;
+    calls: number;
+    errors: number;
+    misses: number;
+    truncated: number;
+    running: number;
+    tools: string[];
+    repo: string | null;
+    instances: string[];
+    client: string | null;
+    agents: number;
+    source: string;
+    tier: "full" | "summary" | "cold";
+}
+export interface ConversationList {
+    enabled: boolean;
+    range_hours: number;
+    total: number;
+    turns: TurnRow[];
+    detail_days: number;
+}
+export interface ConversationTurn extends Omit<TurnRow, "calls"> {
+    calls: Call[];
+}
+export interface ConversationDetail {
+    conversation: string;
+    turns: ConversationTurn[];
+    cold: TurnRow | null;
+    detail_days: number;
 }
 
 export interface LogStatsEnv {

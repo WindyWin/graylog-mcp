@@ -67,7 +67,7 @@
   .table-wrap .acts th:last-child, .table-wrap .acts td:last-child { position: sticky; right: 0; background: var(--color-paper); }
 }
 @media (max-width: 60rem) {
-  .chdr, .chead { grid-template-columns: 5rem 7.5rem 7rem minmax(0, 1fr) 7.5rem 4rem 3rem; gap: 10px; }
+  .chdr, .chead { grid-template-columns: 5rem 7.5rem 7rem 5.5rem minmax(0, 1fr) 7.5rem 4rem 3rem; gap: 10px; }
   .dwrap { padding-left: 0; grid-template-columns: minmax(0, 1fr); }
   .trow.lrn { grid-template-columns: 7rem 6.5rem minmax(0, 1.4fr) 5rem 7rem 8rem 5rem; }
 }
@@ -76,9 +76,9 @@
   .screen-head .tools { margin-left: 0; }
   .tabs { gap: var(--space-md); overflow-x: auto; }
   .chdr { display: none; }
-  .chead { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "tool tool st st" "what what what what" "ct env ms n"; row-gap: 4px; padding-block: 10px; }
+  .chead { grid-template-columns: minmax(0, 1fr) auto auto auto auto; grid-template-areas: "tool tool tool st st" "what what what what what" "ct env conv ms n"; row-gap: 4px; padding-block: 10px; }
   .chead .ctool { grid-area: tool; } .chead .cst { grid-area: st; justify-content: flex-end; } .chead .cwhat { grid-area: what; white-space: normal; overflow-wrap: anywhere; }
-  .chead .ct { grid-area: ct; } .chead .cenv { grid-area: env; } .chead .cms { grid-area: ms; } .chead .cn { grid-area: n; }
+  .chead .ct { grid-area: ct; } .chead .cenv { grid-area: env; } .chead .cconv { grid-area: conv; } .chead .cms { grid-area: ms; } .chead .cn { grid-area: n; }
   .trow { grid-template-columns: minmax(0, 1fr) 3.6rem 3.6rem 3.6rem; row-gap: 4px; padding-block: 8px; }
   .trow.lrn.head { display: none; }
   .trow.head .num { white-space: normal; line-height: 1.2; font-size: 10px; }

@@ -12,6 +12,7 @@ import {
     envHealth,
     envPickerOpen,
     failing,
+    followAddress,
     instances,
     label,
     mode,
@@ -254,6 +255,7 @@ export function Shell({
             const go: Record<string, string> = {
                 o: "home",
                 a: "activity",
+                l: "logs",
                 e: "envs",
                 f: "fields",
                 r: "redaction",
@@ -294,18 +296,14 @@ export function Shell({
                 e.returnValue = "";
             }
         };
-        const hash = () => {
-            if (!location.hash.startsWith("#token="))
-                void navigate(location.hash.slice(1));
-        };
         document.addEventListener("keydown", key);
         window.addEventListener("beforeunload", before);
-        window.addEventListener("hashchange", hash);
+        window.addEventListener("popstate", followAddress);
         return () => {
             clearTimeout(pending);
             document.removeEventListener("keydown", key);
             window.removeEventListener("beforeunload", before);
-            window.removeEventListener("hashchange", hash);
+            window.removeEventListener("popstate", followAddress);
         };
     }, []);
     const up = setup.value ? setup.value.server.running : null,
@@ -321,6 +319,11 @@ export function Shell({
         activity: (
             <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M3 12h4l3-8 4 16 3-8h4" />
+            </svg>
+        ),
+        logs: (
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16M4 12h10M4 18h13" />
             </svg>
         ),
         envs: (
@@ -411,6 +414,7 @@ export function Shell({
                             "bolt",
                             usage.value?.totals.errors,
                         )}
+                        {nav("logs", "Logs", "lines")}
                     </div>
                     <div class="navgroup">
                         <div class="glabel">Configure</div>
@@ -521,9 +525,12 @@ export function Shell({
                                 <div class="banner fail">
                                     <Icon name="fail" />
                                     <div class="text">
-                                        Missing access token. Run{" "}
-                                        <code>graylog-mcp ui</code> to open this
-                                        page with it.
+                                        This browser is not signed in to this
+                                        page. Run <code>graylog-mcp ui</code>{" "}
+                                        once (or <code>graylog-mcp start</code>{" "}
+                                        for the shared server): it opens the
+                                        page with its access token. Then reload
+                                        this tab.
                                     </div>
                                 </div>
                             ) : banner.value ? (

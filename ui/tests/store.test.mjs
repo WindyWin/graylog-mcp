@@ -8,7 +8,7 @@ import ts from "typescript";
 
 // Load the real TypeScript modules in Node; shared state must require no browser globals.
 const output = await mkdtemp(join(tmpdir(), "graylog-admin-store-"));
-for (const name of ["store", "api"]) {
+for (const name of ["store", "api", "router"]) {
     const source = await readFile(
         new URL(`../src/${name}.ts`, import.meta.url),
         "utf8",
@@ -22,6 +22,7 @@ for (const name of ["store", "api"]) {
     const javascript = outputText
         .replaceAll('"./store"', '"./store.mjs"')
         .replaceAll('"./api"', '"./api.mjs"')
+        .replaceAll('"./router"', '"./router.mjs"')
         .replaceAll(
             '"@preact/signals"',
             JSON.stringify(import.meta.resolve("@preact/signals")),
@@ -46,8 +47,8 @@ beforeEach(() => {
     store.usage.value = null;
     store.stats.value = null;
     store.range.value = "24h";
-    globalThis.location = { pathname: "/admin/" };
-    globalThis.history = { replaceState() {} };
+    globalThis.location = { pathname: "/admin/", search: "" };
+    globalThis.history = { replaceState() {}, pushState() {} };
 });
 
 test("shared state imports without DOM and derives environment health", () => {

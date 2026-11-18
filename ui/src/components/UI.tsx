@@ -33,7 +33,8 @@ export type IconName =
     | "sun"
     | "moon"
     | "search"
-    | "db";
+    | "db"
+    | "lines";
 export function Icon({
     name = "page",
     small = false,
@@ -117,6 +118,11 @@ export function Icon({
             <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
                 <rect x="3" y="4" width="18" height="6" rx="1.5" />
                 <rect x="3" y="14" width="18" height="6" rx="1.5" />
+            </svg>
+        ),
+        lines: (
+            <svg class="i" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 6h16M4 12h10M4 18h13" />
             </svg>
         ),
     };

@@ -12,6 +12,7 @@ import {
     loadSetup,
     openEnv,
     openEnvByName,
+    openCalls,
     openProblems,
     range,
     rerun,
@@ -23,8 +24,6 @@ import {
     usage,
     byGroup,
     navigate,
-    filters,
-    activityTab,
     breakdownRefresh,
     breakdownTarget,
 } from "../store";
@@ -388,17 +387,7 @@ export function Overview() {
                     : `${diff >= 0 ? "+" : ""}${diff} ${before}`,
             cls: "",
             title: "See the calls in Activity",
-            run: async () => {
-                if (await navigate("activity")) {
-                    filters.value = {
-                        q: "",
-                        tool: "",
-                        status: "all",
-                        bucket: null,
-                    };
-                    activityTab.value = "calls";
-                }
-            },
+            run: () => openCalls(),
         },
         {
             label: `Found something${scope}`,
