@@ -2720,7 +2720,13 @@ const SETTING_META = {
   trace_fields: ["Trace / correlation id fields", "list", "used by trace_request and the service map"],
   service_fields: ["Service name fields", "list", "the first one present names the service"],
   version_fields: ["Version fields", "list", "a new value marks a deploy"],
-  latency_fields: ["Latency fields (ms)", "list", "used by root_cause"],
+  latency_fields: ["Latency fields", "list", "used by root_cause and the log explorer"],
+  endpoint_fields: ["API fields", "list", "the first one present names the API; a route template beats a path with ids"],
+  status_fields: ["HTTP status fields", "list", "the first one present holds the status code"],
+  business_error_query: ["Business error query", "text", "empty: a status from 400 to 499"],
+  technical_error_query: ["Technical error query", "text", "empty: a status from 500 to 599, or the error query"],
+  slow_ms: ["Slow call thresholds (ms)", "list", "e.g. 1000, 3000, 10000"],
+  latency_unit: ["Latency unit", "select:auto,ms,s", "auto: ms, but seconds for request_time"],
   default_fields: ["Fields shown in search results", "list", ""],
   error_query: ["Error query", "text", "Lucene, e.g. level:<=3 or level:(ERROR OR FATAL)"],
   change_query: ["Start / stop lines", "text", "lines that mark a restart or config reload"],
@@ -2745,6 +2751,7 @@ const SETTING_META = {
 const SETTING_SECTIONS = [
   ["Field names in your logs", "Leave empty to use what the parent level uses", ["service_fields", "trace_fields", "version_fields", "latency_fields", "group_fields.exception", "group_fields.logger", "default_fields", "app_packages"]],
   ["Queries", "", ["error_query", "change_query", "message_lookup_range"]],
+  ["Log explorer", "How the API table reads your request logs", ["endpoint_fields", "status_fields", "latency_unit", "slow_ms", "business_error_query", "technical_error_query"]],
   ["General", "Defaults and display", ["description", "timezone", "default_group", "default_environment", "default_instance"]],
   ["Connection", "", ["verify_tls", "ca_bundle", "proxy", "timeout", "max_concurrency", "retries", "message_api", "aggregation_api"]],
 ];

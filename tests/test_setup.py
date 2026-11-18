@@ -523,3 +523,32 @@ def test_the_admin_page_keeps_no_operation_list_of_its_own():
     html = (Path(admin_package.__file__).parent / "static" / "index.html").read_text(encoding="utf-8")
     assert "const TEMPLATES" not in html and "const QUICK" not in html
     assert "tool_templates" in html and "quick_tools" in html
+
+
+async def test_detect_suggests_the_api_and_status_fields(fake_transport, monkeypatch):
+    from graylog_mcp.config import parse_config
+    from graylog_mcp.setup.detect import detect
+    from graylog_mcp.tools import App
+    from tests.test_regressions import _add
+
+    for i in range(120):
+        _add(fake_transport, seconds_ago=60 + i, route="/orders/{id}", path=f"/orders/{1000 + i}",
+             http_status=404 if i % 10 == 0 else 200, status="success", took_ms=20 + i)  # fmt: skip
+    monkeypatch.setenv("OK_T", "x")
+    app = App.create(parse_config({"instances": {"a": {"url": "https://a.test", "token_env": "OK_T"}}}),
+                     transport=fake_transport.transport)  # fmt: skip
+    found = (await detect(app, app.gl(None), "1h"))["suggested"]
+    assert found["endpoint_fields"] == ["route", "path"]  # the template first: the path has an id in it
+    assert found["status_fields"] == ["http_status"]  # "status" holds words, not codes
+    assert "took_ms" in found["latency_fields"]
+
+
+def test_the_admin_page_writes_slow_thresholds_as_numbers():
+    from graylog_mcp.setup.configfile import write_scope
+
+    data = write_scope({}, "group:acme", {"slow_ms": "500, 2000", "latency_unit": "ms"})
+    assert data["groups"]["acme"] == {"slow_ms": [500, 2000], "latency_unit": "ms"}
+    data = write_scope({}, "global", {"endpoint_fields": "route, path"})
+    assert data["investigation"] == {"endpoint_fields": ["route", "path"]}
+    with pytest.raises(ConfigError, match="slow_ms: expected whole numbers"):
+        write_scope({}, "global", {"slow_ms": "fast"})

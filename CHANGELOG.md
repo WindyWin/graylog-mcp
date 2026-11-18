@@ -24,6 +24,11 @@ All notable changes to this project are documented here. The format follows
   per tool), Conversations (each turn, and in one turn its calls by agent with a waterfall of their Graylog
   requests, the result preview, a JSON download and a refresh while a call runs), Calls and Learned. A
   *Playground runs* switch counts the Playground's runs too.
+- Settings for reading request logs, per environment or group like the other field settings: `endpoint_fields`
+  (the API), `status_fields` (the HTTP status), `business_error_query` and `technical_error_query` (default: status
+  4xx and 5xx), `slow_ms` (thresholds for slow calls) and `latency_unit`. `detect` and the admin page's Log fields
+  screen suggest the API and status fields, a route template before a path with ids in it, and a status field only
+  when it holds HTTP codes.
 
 ### Changed
 - Each screen of the admin page has its own address (`/admin/activity/conversations/<id>?turn=<ms>`), so the

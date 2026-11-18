@@ -61,6 +61,11 @@ DEFAULT_VERSION_FIELDS = [
     "image_tag",
 ]
 DEFAULT_LATENCY_FIELDS = ["took_ms", "duration_ms", "elapsed_ms", "latency_ms", "response_time_ms", "request_time"]
+# The log explorer's API table: a route template first, since a path with ids in it splits one API into many.
+DEFAULT_ENDPOINT_FIELDS = ["route", "http_route", "path", "request_path", "uri", "url_path", "endpoint"]
+DEFAULT_STATUS_FIELDS = ["http_status", "status_code", "response_status", "status"]
+DEFAULT_SLOW_MS = (1000, 3000, 10000)
+LATENCY_UNITS = ("auto", "ms", "s")
 # Lines that mark a process start/stop or a configuration reload.
 DEFAULT_CHANGE_QUERY = (
     '(message:Started AND message:"running for") OR "Shutting down" OR "Graceful shutdown" OR SIGTERM OR '
@@ -144,6 +149,12 @@ class InstanceConfig:
     version_fields: tuple[str, ...] = tuple(DEFAULT_VERSION_FIELDS)
     latency_fields: tuple[str, ...] = tuple(DEFAULT_LATENCY_FIELDS)
     change_query: str = DEFAULT_CHANGE_QUERY
+    endpoint_fields: tuple[str, ...] = tuple(DEFAULT_ENDPOINT_FIELDS)
+    status_fields: tuple[str, ...] = tuple(DEFAULT_STATUS_FIELDS)
+    business_error_query: str = ""  # empty: a status from 400 to 499
+    technical_error_query: str = ""  # empty: a status from 500 to 599, or error_query
+    slow_ms: tuple[int, ...] = DEFAULT_SLOW_MS
+    latency_unit: str = "auto"  # "auto": ms, but seconds for a field named like request_time
 
     @property
     def api_base(self) -> str:
@@ -390,6 +401,12 @@ _INVESTIGATION_KEYS = {
     "version_fields",
     "latency_fields",
     "change_query",
+    "endpoint_fields",
+    "status_fields",
+    "business_error_query",
+    "technical_error_query",
+    "slow_ms",
+    "latency_unit",
 }
 _INSTANCE_KEYS = {
     "url",
@@ -547,9 +564,26 @@ def _investigation(where: str, data: dict[str, Any], base: dict[str, Any]) -> di
         out["error_query"] = _check_query(f"{where}.error_query", data["error_query"])
     if "change_query" in data:
         out["change_query"] = _check_query(f"{where}.change_query", data["change_query"])
-    for key in ("version_fields", "latency_fields"):
+    for key in ("version_fields", "latency_fields", "endpoint_fields", "status_fields"):
         if key in data:
             out[key] = _str_list(f"{where}.{key}", data[key])
+    for key in ("business_error_query", "technical_error_query"):
+        if key in data:  # "" goes back to the default made from the status field
+            value = data[key]
+            out[key] = value if value == "" else _check_query(f"{where}.{key}", value)
+    if "slow_ms" in data:
+        slow = data["slow_ms"]
+        if (
+            not isinstance(slow, list)
+            or not 1 <= len(slow) <= 5
+            or not all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in slow)
+        ):
+            raise ConfigError(f"{where}.slow_ms: expected 1 to 5 positive whole numbers of milliseconds")
+        out["slow_ms"] = tuple(sorted(set(slow)))
+    if "latency_unit" in data:
+        if data["latency_unit"] not in LATENCY_UNITS:
+            raise ConfigError(f"{where}.latency_unit: expected one of {', '.join(LATENCY_UNITS)}")
+        out["latency_unit"] = data["latency_unit"]
     if "message_lookup_range" in data:
         from graylog_mcp.timerange import parse_duration  # local import: avoid a cycle
 
@@ -670,6 +704,12 @@ def _parse_instance(name: str, data: dict[str, Any], defaults: dict[str, Any]) -
         version_fields=inv["version_fields"],
         latency_fields=inv["latency_fields"],
         change_query=inv["change_query"],
+        endpoint_fields=inv["endpoint_fields"],
+        status_fields=inv["status_fields"],
+        business_error_query=inv["business_error_query"],
+        technical_error_query=inv["technical_error_query"],
+        slow_ms=inv["slow_ms"],
+        latency_unit=inv["latency_unit"],
         **apis,
     )
 
@@ -1415,6 +1455,12 @@ def parse_config(
             "version_fields": tuple(DEFAULT_VERSION_FIELDS),
             "latency_fields": tuple(DEFAULT_LATENCY_FIELDS),
             "change_query": DEFAULT_CHANGE_QUERY,
+            "endpoint_fields": tuple(DEFAULT_ENDPOINT_FIELDS),
+            "status_fields": tuple(DEFAULT_STATUS_FIELDS),
+            "business_error_query": "",
+            "technical_error_query": "",
+            "slow_ms": DEFAULT_SLOW_MS,
+            "latency_unit": "auto",
         },
     )
 
