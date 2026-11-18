@@ -12,7 +12,9 @@ from graylog_mcp import usage_conversations as conversations
 from graylog_mcp.usage_store import store
 
 A, B = "aaaaaaaaaaaa", "bbbbbbbbbbbb"
-NOW = time.time() // 3600 * 3600 + 1800  # mid-hour: a call minutes ago stays in the current bucket
+# the last half past the hour: a call minutes before stays in its hour's bucket, and it is never in the future, which
+# the admin page (reading up to the real time) would not see
+NOW = (time.time() - 1800) // 3600 * 3600 + 1800
 
 
 def _call(ts: float, conversation: str = A, **extra) -> dict:
