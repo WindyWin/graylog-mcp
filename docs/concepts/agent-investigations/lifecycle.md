@@ -88,7 +88,7 @@ Propose two MCP tools to distinguish reads from local state changes:
 
 Investigation-capable Graylog tools receive an optional `investigation_id`. Propagate it through operation dispatch and nested calls. Tools used without that argument keep their existing behavior. The wrapper assigns step IDs and links results to the right attempt; callers cannot attach another repository's evidence by guessing an ID.
 
-Lifecycle writes change local investigation state, even though Graylog remains read-only. Give the lifecycle tool accurate mutation annotations; do not inherit the current blanket read-only annotation. Apply the same policy to public Graylog tools extended with investigation recording: their declaration must allow for local mutations even when investigation_id is optional. Static tool metadata cannot change per invocation. Keep get_investigation read-only. Resolve retry semantics with operation IDs and deduplication rather than claiming every lifecycle action is naturally idempotent.
+Lifecycle writes change local investigation state, even though Graylog remains read-only. Give the lifecycle tool accurate mutation annotations (not read-only, not destructive, closed world); do not inherit the current blanket read-only annotation. Keep get_investigation read-only. The public Graylog tools that gain an optional `investigation_id` keep their read-only annotation: recording a step is a local audit write of the same kind as the usage log, it never changes anything in Graylog or in the user's systems, and flipping the hint on every search tool would change client approval policies for everyone, including users who never start an investigation. Static tool metadata cannot change per invocation, so the annotation describes the tool's effect on the systems it reads. The investigation arguments and tools can be switched off (`GRAYLOG_MCP_INVESTIGATIONS=off`), which restores the earlier tool list exactly. Resolve retry semantics with operation IDs and deduplication rather than claiming every lifecycle action is naturally idempotent.
 
 The optional existing `ask` operation can contribute evidence when configured. Core investigation persistence and the UI must work without its TypeSafe model configuration. The connected coding agent supplies the user-facing plan and assessments.
 
@@ -188,7 +188,7 @@ Consider shareable reports, issue tracker integration, remote hosting with delib
 12. A post-fix comparison records its own time window, checks, and outcome while preserving the original incident conclusion.
 13. The UI supports keyboard selection, readable status text, narrow layouts, and no automatic repeated browser opening.
 14. Evidence persists through both MCP and Playground operation paths and through composite operations.
-15. Core execution remains read-only toward Graylog; local state mutations have accurate tool metadata.
+15. Core execution remains read-only toward Graylog; the one tool that mutates local investigation state has accurate metadata, and Graylog tools keep their read-only annotation when they only record a step.
 
 ## Design choices to validate with users
 
