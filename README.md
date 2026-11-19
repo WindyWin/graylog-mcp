@@ -96,7 +96,8 @@ search endpoints that execute or check a query without saving it (`/views/search
 
 ## Tools
 
-All tools are annotated `readOnlyHint` and accept an optional `instance`. Tools that do several related things
+Every tool is annotated `readOnlyHint` towards Graylog, except `investigation`, which keeps a local record (see
+[Investigations](#investigations)). The Graylog tools accept an optional `instance`. Tools that do several related things
 take a `kind`, `view` or `what`; an argument that does not apply to the one chosen is refused, not ignored.
 
 **Scan**
@@ -134,6 +135,13 @@ take a `kind`, `view` or `what`; an argument that does not apply to the one chos
   and the first error.
 - `compare_periods` — two periods (e.g. before/after a deploy): which error groups are new, grew,
   disappeared or shrank, normalised per hour.
+
+**Keep an investigation**
+- `investigation` — a local record of one investigation: `start` (fixes the window in absolute times, returns an
+  `owner_fence`), `update` (branches, checks, hypotheses, assessments, a changed scope with its reason),
+  `checkpoint`, `finish`, `cancel`, `resume`. Changes this machine's `investigations.db`, never Graylog.
+- `get_investigation` — its snapshot, a short briefing to continue from, or one saved piece of evidence; without an
+  id, the recent investigations of this repository.
 
 **Discover**
 - `describe` — `what="instances"` (default: detected version and the API in use), `"streams"`, `"fields"` (so
@@ -315,6 +323,35 @@ looked up in one query of at most 500 messages. The error query and trace and se
 (`error_query`, `trace_fields`, `service_fields`). A repository's own `.graylog-mcp.toml` may set the other `[ask]` keys but not `base_url` or
 `api_key_env`, which decide where the key and the error text go: set those in your user or a central config.
 
+## Investigations
+
+An investigation is a record the agent keeps while it works, so that the question, the scope, what was checked and
+concluded survive the conversation and a later session can pick it up:
+
+1. `investigation(action="start", ...)` turns the window into absolute times once (so "the last hour" cannot drift),
+   fixes the instance, and returns an `id`, an `owner_fence` and, while an admin page runs, a `ui` link for you.
+2. The Graylog tools (`search_logs`, `aggregate`, `compare_periods`, `get_message`, `trace_request`, `scan`,
+   `root_cause`, `run_preset`) take optional `investigation_id`, `owner_fence` and `check_id`. A call that has them is a
+   **step**: written as running before it is sent, then closed with a bounded, redacted **evidence** record (the exact
+   count apart from the lines returned, what was cut, the query asked beside the one run). A search that found nothing
+   is evidence of that; a search that failed is a failed step and no evidence. Calls without them are as they were.
+3. `investigation(action="update", items=[...])` records what the agent thinks: a branch (a question), a check (its
+   purpose and what each outcome would mean), a hypothesis, an assessment (`supported`, `contradicted_in_scope` or
+   `undetermined`, citing evidence ids). A successful call is not a finding; the agent says what it found.
+4. `checkpoint` saves a briefing and waits for input; `resume` opens a new attempt from it; `finish` records the
+   outcome (`explanation_supported`, `cause_undetermined`, `no_matching_evidence`, `no_anomaly_detected`) and a report.
+
+Ownership is explicit: only the holder of the current `owner_fence` writes, a newer `resume` fences the old holder out,
+and a holder idle for 10 minutes can be taken over. A step that was running when its process ended, or its owner's
+lease ran out, is marked `interrupted`, never `succeeded`. A retry with the same `operation_id` repeats the answer
+instead of the action, and a record changed since it was read is refused (`revision`).
+
+Everything is stored redacted in `investigations.db` in the home directory (sqlite, WAL; two server processes may share
+it) under a size limit that drops the oldest ended investigations' excerpts first, keeping their summaries.
+`GRAYLOG_MCP_INVESTIGATIONS=off` removes the two tools, the three arguments and their instructions, and the model sees
+exactly what it saw before. The workspace page, the export and `graylog-mcp investigate` follow; the concept is in
+[PR #48](https://github.com/ntbang0901/graylog-mcp/pull/48).
+
 ## Root cause analysis
 
 Example verdict, from the scenario in the integration suite (a bad deploy of `payment`), identical on
@@ -433,6 +470,7 @@ Environment variables:
 | `GRAYLOG_MCP_CONFIG` | path of a TOML config file |
 | `GRAYLOG_MCP_HTTP_TOKEN` | bearer token required by the HTTP transport |
 | `GRAYLOG_MCP_HOME` | the server's state folder: admin token, pid, log and recorded calls (default `~/.config/graylog-mcp`) |
+| `GRAYLOG_MCP_INVESTIGATIONS` | `off` removes the `investigation` and `get_investigation` tools and the `investigation_id`, `check_id` and `owner_fence` arguments (see [Investigations](#investigations)) |
 | `GRAYLOG_MCP_USAGE` | `calls` records the calls without their result previews, `off` records nothing (see [the admin UI](#setup-helpers-and-admin-ui)) |
 | `GRAYLOG_MCP_USAGE_HOT_DAYS`, `GRAYLOG_MCP_USAGE_DAYS`, `GRAYLOG_MCP_USAGE_SESSION_DAYS`, `GRAYLOG_MCP_USAGE_MAX_MB` | how long recorded calls keep every detail (default 2 days), their summary (15, at the least) and one line per conversation (90), and the folder's size limit (50 MB) |
 

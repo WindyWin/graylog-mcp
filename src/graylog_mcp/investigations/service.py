@@ -675,15 +675,16 @@ class Investigations:
         tool: str | None,
         source: str,
         requested: dict[str, Any],
-        instance: str,
+        instance: str | None,
         call_id: str | None,
     ) -> dict[str, Any]:
         """Write the step as running before the operation is awaited, so the page shows it while it runs. Refuses
-        a call that is not the owner's, for another instance, or for a check that does not exist."""
+        a call that is not the owner's, for another instance, or for a check that does not exist. A call that
+        names no instance runs on the investigation's."""
         with self.store.tx() as con:
             row = self._open(con, investigation_id, repo)
             self._authorize(con, row, owner_fence)
-            if instance != row["instance"]:
+            if instance is not None and instance != row["instance"]:
                 raise InvestigationError(
                     f"{row['label']} is about instance {row['instance']!r}; this call is for {instance!r}. "
                     "Start another investigation for it"
@@ -716,12 +717,18 @@ class Investigations:
                     call_id,
                     os.getpid(),
                     STEP_RUNNING,
-                    instance,
+                    row["instance"],
                     self.clock(),
                 ),
             )
             self._event(con, row["id"], "step_started", ("step", step), {"operation": operation, "check": check_id})
-            return {"step": step, "investigation": row["id"], "attempt": row["current_attempt"], "fence": row["fence"]}
+            return {
+                "step": step,
+                "investigation": row["id"],
+                "attempt": row["current_attempt"],
+                "fence": row["fence"],
+                "instance": row["instance"],
+            }
 
     def finish_step(
         self,
@@ -817,6 +824,23 @@ class Investigations:
             if view == "briefing":
                 return briefing.briefing(con, row)
             return briefing.snapshot(con, row, self._scope_row(con, row["id"]))
+
+    def scope_of(self, *, repo: str | None, investigation_id: str) -> tuple[str, Scope]:
+        """The instance and current scope revision, for a change that keeps what it does not override."""
+        with self.store.read() as con:
+            row = self._row(con, investigation_id, repo)
+            cur = self._scope_row(con, row["id"])
+        scope = Scope(
+            from_ts=cur["from"],
+            to_ts=cur["to"],
+            base_from=cur["baseline_from"],
+            base_to=cur["baseline_to"],
+            timezone=cur["timezone"],
+            query=cur["query"],
+            streams=tuple(cur["streams"]),
+            focus=cur["focus"],
+        )
+        return row["instance"], scope
 
     def list(self, *, repo: str | None, state: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         with self.store.tx() as con:

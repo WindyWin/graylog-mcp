@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from graylog_mcp.toolspecs.discovery import DESCRIBE, RUN_PRESET
 from graylog_mcp.toolspecs.investigate import ASK, COMPARE_PERIODS, ROOT_CAUSE, TRACE_REQUEST
+from graylog_mcp.toolspecs.investigations import GET_INVESTIGATION, INVESTIGATION
 from graylog_mcp.toolspecs.scanning import SCAN
 from graylog_mcp.toolspecs.search import AGGREGATE, GET_MESSAGE, SEARCH_LOGS
 from graylog_mcp.toolspecs.spec import ToolSpec
@@ -20,4 +21,6 @@ TOOLS: tuple[ToolSpec, ...] = (
     ASK,
     DESCRIBE,
     RUN_PRESET,
+    INVESTIGATION,
+    GET_INVESTIGATION,
 )

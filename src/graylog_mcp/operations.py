@@ -14,6 +14,7 @@ from typing import Any
 from graylog_mcp import rca, scan, tools
 from graylog_mcp.ask.pipeline import ask
 from graylog_mcp.config import ConfigError
+from graylog_mcp.investigations import ops as investigation_ops
 from graylog_mcp.tools import App, ToolInputError
 
 
@@ -95,6 +96,8 @@ OPERATIONS: dict[str, Operation] = {
         _op(scan.list_scan_rules),
         _op(run_preset),
         _op(ask, playground=True),
+        _op(investigation_ops.investigation),
+        _op(investigation_ops.get_investigation),
     )
 }
 # the admin page's quick-run chips, in display order

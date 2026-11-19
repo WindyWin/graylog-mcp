@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Persistent agent investigations: the `investigation` tool (`start`, `update`, `checkpoint`, `finish`, `cancel`,
+  `resume`) and `get_investigation` keep a local record in `investigations.db` of an investigation's scope (fixed in
+  absolute times), steps, bounded redacted evidence, the agent's checks and assessments, and its attempts. The Graylog
+  tools take optional `investigation_id`, `owner_fence` and `check_id` to run as recorded steps; ownership is a fence
+  with a 10-minute lease, so a session that vanished is taken over and its running steps read back as interrupted.
+  Graylog stays read-only; `investigation` is the one tool that is not annotated read-only and only writes this local
+  file. `GRAYLOG_MCP_INVESTIGATIONS=off` restores the previous tool list byte for byte. The workspace page, export and
+  CLI follow.
 - Each tool call is now recorded when it starts and when it ends, with who called it (the conversation: a Codex
   session, the HTTP session, else the server process; the client's tool call id; the client), the Graylog requests it
   sent (path, redacted query, wait, duration, status, retries) and the first 2,000 characters of its redacted result.
