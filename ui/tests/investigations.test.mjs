@@ -256,3 +256,63 @@ test("the address round-trips and drops trailing parts", () => {
         evidence: null,
     });
 });
+
+test("evidence cited by two records is shared; one cited once is not", () => {
+    const shared = m.sharedEvidence(
+        snap(
+            [
+                item("assessment", "a1", { supporting: ["e1", "e2"] }),
+                item("assessment", "a2", { contradicting: ["e1"] }),
+                item("check_result", "r1", { evidence: ["e2", "e2"] }),
+            ],
+            [],
+        ),
+    );
+    assert.deepEqual(
+        [...shared.entries()],
+        [
+            ["e1", ["a1", "a2"]],
+            ["e2", ["a1", "r1"]],
+        ],
+    );
+});
+
+test("a rate is only shown over a known denominator", () => {
+    const got = m.cohortsOf(
+        item("comparison", "m1", {
+            cohorts: [
+                { name: "v1", count: 3, denominator: 100, rate: 0.03 },
+                { name: "v2", count: 9 },
+                { name: "v3", count: 1, denominator: 50 },
+            ],
+        }),
+    );
+    assert.deepEqual(
+        got.map((c) => [c.eligible, c.rate]),
+        [
+            [100, "3.0%"],
+            [null, "unknown denominator"],
+            [50, ""],
+        ],
+    );
+});
+
+test("a branch with a request waiting is blocked, a received one is not", () => {
+    const blocked = m.blockedBranches(
+        snap(
+            [
+                item("evidence_request", "q1", {
+                    status: "requested",
+                    branch: "b1",
+                }),
+                item("evidence_request", "q2", {
+                    status: "received",
+                    branch: "b2",
+                }),
+                item("evidence_request", "q3", { status: "requested" }),
+            ],
+            [],
+        ),
+    );
+    assert.deepEqual([...blocked], ["b1"]);
+});

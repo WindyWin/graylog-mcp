@@ -270,3 +270,70 @@ export function selectionOf(sub: string[]): Selection {
     const at = (i: number) => (sub[i] && sub[i] !== "-" ? sub[i] : null);
     return { id: at(0), branch: at(1), check: at(2), evidence: at(3) };
 }
+
+// ------------------------------------------------------------------ findings
+export const CITE_FIELDS = ["evidence", "supporting", "contradicting"];
+export const citesOf = (i: InvItem): string[] =>
+    CITE_FIELDS.flatMap((f) =>
+        Array.isArray(i.data[f]) ? (i.data[f] as string[]) : [],
+    );
+// evidence cited by more than one record: one saved piece, counted once, marked where it is shared
+export function sharedEvidence(snap: InvSnapshot): Map<string, string[]> {
+    const by = new Map<string, string[]>();
+    for (const i of snap.items)
+        for (const e of new Set(citesOf(i)))
+            by.set(e, [...(by.get(e) ?? []), i.id]);
+    return new Map([...by].filter(([, ids]) => ids.length > 1));
+}
+export const LINK_WORD: Record<string, string> = {
+    candidate: "Candidate: not established",
+    observed: "Observed",
+};
+export const REQUEST_WORD: Record<string, string> = {
+    requested: "Waiting for an answer",
+    received: "Received",
+    withdrawn: "Withdrawn",
+};
+export const PROVENANCE_WORD: Record<string, string> = {
+    user_reported: "reported by the user",
+    unverified: "unverified",
+    verified: "verified",
+};
+export interface Cohort {
+    name: string;
+    count: number | null;
+    eligible: number | null;
+    rate: string; // "" when there is nothing to say; "unknown denominator" when there is no eligible count
+}
+// a rate is shown only over a known denominator
+export function cohortsOf(i: InvItem): Cohort[] {
+    const raw = Array.isArray(i.data.cohorts)
+        ? (i.data.cohorts as Record<string, unknown>[])
+        : [];
+    return raw.map((c) => {
+        const eligible =
+            typeof c.denominator === "number" ? c.denominator : null;
+        return {
+            name: String(c.name ?? ""),
+            count: typeof c.count === "number" ? c.count : null,
+            eligible,
+            rate:
+                eligible === null
+                    ? "unknown denominator"
+                    : typeof c.rate === "number"
+                      ? `${(c.rate * 100).toFixed(1)}%`
+                      : "",
+        };
+    });
+}
+// requests that hold a branch up
+export const blockedBranches = (snap: InvSnapshot): Set<string> =>
+    new Set(
+        itemsOf(snap, "evidence_request")
+            .filter(
+                (r) =>
+                    r.data.status === "requested" &&
+                    typeof r.data.branch === "string",
+            )
+            .map((r) => r.data.branch as string),
+    );

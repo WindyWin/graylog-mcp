@@ -51,7 +51,10 @@ class InvestigationArgs(BaseModel):
             description=(
                 "update: records {kind, id?, revision? to change one, ...fields}. kinds: branch (question), check "
                 "(purpose), hypothesis (statement), assessment (claim, assessment=supported|contradicted_in_scope|"
-                "undetermined, evidence ids), check_result, identity, relationship, evidence_request, comparison"
+                "undetermined; supported/contradicted cite evidence ids), check_result (check, result, evidence), "
+                "identity (type, namespace, value, evidence), relationship (from, to, relation, status "
+                "candidate|observed; observed needs basis, evidence), evidence_request (question, status, "
+                "provenance), comparison (unit, cohorts)"
             )
         ),
     ] = None
@@ -66,6 +69,9 @@ class InvestigationArgs(BaseModel):
         Field(description="finish: was a fix checked (apart from outcome)"),
     ] = None
     takeover: Annotated[bool | None, Field(description="resume: take over a live owner")] = None
+    follows: Annotated[str | None, Field(description="start: the completed investigation whose fix this verifies")] = (
+        None
+    )
 
 
 INVESTIGATION = ToolSpec(

@@ -338,6 +338,10 @@ concluded survive the conversation and a later session can pick it up:
 3. `investigation(action="update", items=[...])` records what the agent thinks: a branch (a question), a check (its
    purpose and what each outcome would mean), a hypothesis, an assessment (`supported`, `contradicted_in_scope` or
    `undetermined`, citing evidence ids). A successful call is not a finding; the agent says what it found.
+   A record claims no more than it carries: `supported` and `contradicted_in_scope` cite evidence, an identity has a
+   type, a namespace and a value that is not a redaction placeholder, a link is a `candidate` until an update gives
+   evidence for `observed`, a comparison shows a rate only over a known denominator, and a request to you records
+   whether the answer is `user_reported`, `unverified` or `verified`.
 4. `checkpoint` saves a briefing and waits for input; `resume` opens a new attempt from it; `finish` records the
    outcome (`explanation_supported`, `cause_undetermined`, `no_matching_evidence`, `no_anomaly_detected`) and a report.
 
@@ -350,7 +354,8 @@ Everything is stored redacted in `investigations.db` in the home directory (sqli
 it) under a size limit that drops the oldest ended investigations' excerpts first, keeping their summaries.
 `GRAYLOG_MCP_INVESTIGATIONS=off` removes the two tools, the three arguments and their instructions, and the model sees
 exactly what it saw before. The admin page's **Investigations** screen shows them live (the list, then branches, checks and steps, then one
-piece of evidence); the export and `graylog-mcp investigate` follow; the concept is in
+piece of evidence); `graylog-mcp investigate list|show|resume|export` reads them without the server (`resume` prints the briefing and the
+sentence to give an agent; it starts nothing), and the page exports Markdown; the concept is in
 [PR #48](https://github.com/ntbang0901/graylog-mcp/pull/48).
 
 ## Root cause analysis

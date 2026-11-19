@@ -9,7 +9,7 @@ import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 
-from graylog_mcp.investigations.model import InvestigationError, NotFound
+from graylog_mcp.investigations.model import MAX_SNAPSHOT_STEPS, InvestigationError, NotFound
 
 SNAPSHOT_CHARS = 40_000
 BRIEFING_CHARS = 8_000
@@ -33,6 +33,7 @@ def _size(value: Any) -> int:
 
 def summary(row: sqlite3.Row, scope: dict[str, Any]) -> dict[str, Any]:
     return {
+        "follows": row["follows"],
         "id": row["id"],
         "label": row["label"],
         "title": row["title"],
@@ -142,6 +143,9 @@ def snapshot(con: sqlite3.Connection, row: sqlite3.Row, scope: dict[str, Any]) -
     out["items"] = _items(con, inv, full=True)
     out["steps"] = _steps(con, inv, 100)
     out["evidence"] = _evidence_index(con, inv)
+    out["followed_by"] = [
+        r["label"] for r in con.execute("SELECT label FROM investigation WHERE follows = ? ORDER BY num", (inv,))
+    ]
     out["cursor"] = _cursor(con, inv)
     cut: dict[str, int] = {}
     while _size(out) > SNAPSHOT_CHARS and out["steps"]:
@@ -168,10 +172,13 @@ def briefing(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
         (inv,),
     ).fetchone()
     steps = [{k: s[k] for k in ("operation", "check", "state", "evidence")} for s in _steps(con, inv, 12)]
+    items = _items(con, inv, full=True)
+    ran = {s["check"] for s in _steps(con, inv, MAX_SNAPSHOT_STEPS) if s["check"]}
     out: dict[str, Any] = {
         "id": inv,
         "label": row["label"],
         "question": row["question"],
+        "follows": row["follows"],
         "state": row["state"],
         "instance": row["instance"],
         "scope": {
@@ -184,6 +191,30 @@ def briefing(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
             "query": scope["query"],
         },
         "checkpoint": last["checkpoint"] if last else None,
+        "assessments": [
+            {
+                "id": i["id"],
+                "assessment": i["data"].get("assessment"),
+                "claim": _head(i["data"], 160),
+                "cites": [c for f in ("evidence", "supporting", "contradicting") for c in i["data"].get(f, [])],
+            }
+            for i in items
+            if i["kind"] == "assessment"
+        ],
+        "blocked": [
+            {"id": i["id"], "question": _head(i["data"], 160), "branch": i["data"].get("branch")}
+            for i in items
+            if i["kind"] == "evidence_request" and i["data"].get("status") == "requested"
+        ],
+        "next_checks": [
+            {"id": i["id"], "purpose": _head(i["data"], 160)}
+            for i in items
+            if i["kind"] == "check" and i["id"] not in ran
+        ],
+        "scope_revisions": [
+            {"rev": r["rev"], "reason": r["reason"]}
+            for r in con.execute("SELECT rev, reason FROM scope_revision WHERE investigation = ? ORDER BY rev", (inv,))
+        ],
         "records": _items(con, inv, full=False, head=100)[-30:],  # the newest; the snapshot has them all
         "recent_steps": steps,
         "evidence": [
@@ -192,7 +223,7 @@ def briefing(con: sqlite3.Connection, row: sqlite3.Row) -> dict[str, Any]:
         ],
         "reports": [{"outcome": r.get("outcome")} for r in _load(row["report"], [])],
     }
-    for name in ("evidence", "recent_steps", "records"):  # least valuable first, oldest first
+    for name in ("evidence", "recent_steps", "records", "next_checks", "scope_revisions"):  # least valuable first
         while _size(out) > BRIEFING_CHARS and out[name]:
             out[name].pop(0)
             out["truncated"] = True

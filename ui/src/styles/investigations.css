@@ -36,3 +36,14 @@
 .inv-excerpts i { font-style: normal; color: var(--color-muted); margin-inline-end: var(--space-3xs, 2px); }
 .inv-report { white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 60rem) { .inv-panes { grid-template-columns: minmax(0, 1fr); } }
+.inv-findings ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xs); }
+.inv-findings li { overflow-wrap: anywhere; }
+.inv-cites { display: inline-flex; flex-wrap: wrap; gap: var(--space-2xs); margin-inline-start: var(--space-xs); }
+.inv-chips { display: flex !important; flex-wrap: wrap; gap: var(--space-xs) !important; }
+.inv-chip { display: inline-grid; padding: var(--space-2xs) var(--space-xs); border: 1px solid var(--color-rule); border-radius: var(--radius-pill); background: var(--color-paper-2); font-size: var(--text-sm); }
+.inv-chip-type { font-size: var(--text-xs); color: var(--color-ink-2); }
+.inv-link-row { padding-inline-start: var(--space-xs); border-inline-start: 2px solid var(--color-accent); }
+.inv-link-row.candidate { border-inline-start-style: dashed; border-inline-start-color: var(--color-field-edge); }
+.inv-answer { margin-top: var(--space-2xs); padding: var(--space-2xs) var(--space-xs); background: var(--color-paper-2); border-radius: var(--radius-control); }
+.inv-table { font-size: var(--text-sm); }
+.inv-table th, .inv-table td { text-align: start; padding: var(--space-2xs) var(--space-xs); }

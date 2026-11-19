@@ -7,6 +7,17 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Investigations keep what an agent concludes, not only what ran: records are refused when they claim more than they
+  carry (an assessment of "supported" with nothing cited, an identity whose value is a redaction placeholder, a link
+  called observed without evidence, a rate over an unknown denominator, a check result with only a step that ran), and
+  a link stays a candidate until an update gives evidence for it. Requests to the user keep who said what
+  (`user_reported`, `unverified`, `verified`). `start` takes `follows` to verify a fix in its own window without
+  changing the conclusion it follows. The briefing now lists assessments, requests waiting for an answer and checks
+  not yet run.
+- `graylog-mcp investigate list|show|resume|export` reads the investigations straight from the local file (no server
+  needed): `show` prints them as text or `--json`, `resume` prints the briefing and what to tell the agent (it starts
+  nothing), `export` writes Markdown. The admin page has the same export and shows assessments, identities, candidate
+  and observed links, requests and comparisons.
 - The admin page has an Investigations screen: the list (state in words, "needs attention" for an agent waiting or cut
   off) and a workspace of branches, checks and steps with an evidence inspector (the query as asked beside the one that
   ran, exact against shown counts, what was cut, excerpts as text), a live feed that survives reloads and reconnects

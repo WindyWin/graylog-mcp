@@ -22,7 +22,7 @@ import time
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from graylog_mcp.investigations import briefing
+from graylog_mcp.investigations import briefing, export, rules
 from graylog_mcp.investigations.model import (
     ANY_REPO,
     ASSESSMENTS,
@@ -301,8 +301,11 @@ class Investigations:
         redact: Redact,
         client: str | None = None,
         operation_id: str | None = None,
+        follows: str | None = None,
     ) -> dict[str, Any]:
-        """Create the record, its first scope revision and its first attempt, and hand back the owner fence. A retry
+        """Create the record, its first scope revision and its first attempt, and hand back the owner fence. With
+        ``follows``, a verification of a fix: its own window and record, linked to a completed investigation whose
+        conclusion it never changes. A retry
         with the same ``operation_id`` returns the same investigation with a new fence (the first answer may have
         been lost, and the token is not stored)."""
         with self.store.tx() as con:
@@ -316,12 +319,19 @@ class Investigations:
                     self._event(con, row["id"], "owner_rotated", data={"reason": "start retried"})
                     return {**self._summary(con, row["id"]), "owner_fence": owner, "deduplicated": True}
                 return {**self._summary(con, row["id"]), "deduplicated": True}
+            earlier = None
+            if follows:
+                earlier = self._row(con, follows, repo)
+                if earlier["state"] != COMPLETED:
+                    raise InvestigationError(
+                        f"{earlier['label']} is {earlier['state']}: only a completed investigation is followed up"
+                    )
             now = self.clock()
             inv = new_id("inv")
             num = con.execute("SELECT COALESCE(MAX(num), 0) + 1 FROM investigation").fetchone()[0]
             con.execute(
-                "INSERT INTO investigation (id, num, label, title, question, repo, instance, state, created, updated) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO investigation (id, num, label, title, question, repo, instance, state, created, updated, "
+                "follows) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     inv,
                     num,
@@ -333,8 +343,11 @@ class Investigations:
                     RUNNING,
                     now,
                     now,
+                    earlier["id"] if earlier else None,
                 ),
             )
+            if earlier:  # a note on the earlier record's feed, not a change to it
+                self._event(con, earlier["id"], "followed_up", data={"by": f"INV-{num}"})
             self._add_scope(con, inv, 1, scope, "initial scope", client or "agent", redact)
             row = con.execute("SELECT * FROM investigation WHERE id = ?", (inv,)).fetchone()
             owner, fence = self._new_owner(con, row)
@@ -630,7 +643,9 @@ class Investigations:
                     "SELECT 1 FROM item WHERE investigation = ? AND kind = 'branch' AND id = ?", (row["id"], branch)
                 ).fetchone():
                     raise InvestigationError(f"check {ident}: branch {branch!r} does not exist in this investigation")
+        data = rules.check(con, row["id"], kind, ident, data)
         body = redact(data)
+        rules.after_redaction(kind, body, ident)
         if len(_dump(body)) > MAX_ITEM_BYTES:
             raise InvestigationError(f"{kind} {ident} is larger than {MAX_ITEM_BYTES} bytes: keep it to the point")
         now = self.clock()
@@ -824,6 +839,8 @@ class Investigations:
                 return briefing.evidence(con, row, evidence_id)
             if view == "briefing":
                 return briefing.briefing(con, row)
+            if view == "export":  # for the admin page and the CLI, not the model: it has the snapshot
+                return {"markdown": export.markdown(con, row, self._scope_row(con, row["id"]))}
             return briefing.snapshot(con, row, self._scope_row(con, row["id"]))
 
     def scope_of(self, *, repo: str | None, investigation_id: str) -> tuple[str, Scope]:

@@ -395,6 +395,7 @@ export interface InvScope {
 }
 export interface InvSummary {
     id: string;
+    follows: string | null;
     label: string;
     title: string;
     question: string;
@@ -469,6 +470,7 @@ export interface InvSnapshot extends InvSummary {
     steps: InvStep[];
     evidence: InvEvidenceRow[];
     cursor: number;
+    followed_by?: string[];
     truncated?: Record<string, number>;
 }
 export interface InvEvent {

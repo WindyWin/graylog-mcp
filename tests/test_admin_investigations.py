@@ -230,3 +230,12 @@ async def test_with_investigations_off_the_page_gets_an_empty_answer(world, monk
     got = (await client.get("/api/investigations")).json()
     assert got == {"enabled": False, "investigations": []}
     assert (await client.get(f"/api/investigations/{inv['id']}")).json()["enabled"] is False
+
+
+async def test_the_export_is_markdown_for_download(world):
+    _, inv, _, client = world
+    got = await client.get(f"/api/investigations/{inv['id']}/export")
+    assert got.status_code == 200 and got.headers["content-type"].startswith("text/markdown")
+    assert f"{inv['id']}.md" in got.headers["content-disposition"]
+    assert got.text.startswith("# Failures (INV-1)") and "search_logs" in got.text
+    assert (await client.get("/api/investigations/INV-999/export")).status_code == 404

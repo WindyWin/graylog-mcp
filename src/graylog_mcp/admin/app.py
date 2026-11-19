@@ -739,6 +739,22 @@ def build_app(state: AdminState) -> Starlette:
             return _err(str(exc), 404 if isinstance(exc, NotFound) else 400)
         return JSONResponse(found)
 
+    async def export_investigation(request: Request) -> Response:
+        if (off := _investigations_off()) is not None:
+            return off
+        try:
+            got = await investigations.run(
+                investigations.service().get, repo=ANY_REPO, investigation_id=request.path_params["id"], view="export"
+            )
+        except InvestigationError as exc:
+            return _err(str(exc), 404 if isinstance(exc, NotFound) else 400)
+        name = re.sub(r"[^A-Za-z0-9_.-]", "-", request.path_params["id"])
+        return Response(
+            got["markdown"],
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}.md"'},
+        )
+
     async def investigation_events(request: Request) -> Response:
         if (off := _investigations_off()) is not None:
             return off
@@ -1137,6 +1153,7 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/investigations", list_investigations),
         Route("/api/investigations/{id}", get_investigation),
         Route("/api/investigations/{id}/events", investigation_events),
+        Route("/api/investigations/{id}/export", export_investigation),
         Route("/api/investigations/{id}/evidence/{eid}", get_investigation_evidence),
         Route("/api/usage", get_usage),
         Route("/api/conversations", get_conversations),

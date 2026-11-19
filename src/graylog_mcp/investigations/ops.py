@@ -99,6 +99,7 @@ async def investigation(
     report: dict[str, Any] | None = None,
     verification: str | None = None,
     takeover: bool | None = None,
+    follows: str | None = None,
 ) -> dict[str, Any]:
     if action not in ACTIONS:
         raise InvestigationError(f"action must be one of: {', '.join(ACTIONS)}")
@@ -117,6 +118,7 @@ async def investigation(
             scope=first,
             redact=redact,
             operation_id=operation_id,
+            follows=follows,
         )
         return _with_link(app, out)
     if not investigation_id:

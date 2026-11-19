@@ -266,7 +266,7 @@ def _version(argv: list[str]) -> int:
 
 SUBCOMMANDS = (
     "serve", "start", "stop", "status", "update", "init", "login", "logout", "repo", "doctor", "detect", "install",
-    "ui", "connect", "headers", "version",
+    "ui", "connect", "headers", "version", "investigate",
     "keepalive",  # internal: what the login item runs on Windows and XDG desktops
     "hook",  # internal: what Claude Code runs once 'install claude-code --trace' added the hooks
 )  # fmt: skip
@@ -291,6 +291,7 @@ usage: graylog-mcp start|stop|status|update   the background server
        graylog-mcp doctor [options]           check config, connections, permissions and field mapping
        graylog-mcp detect [options]           suggest field names from the logs
        graylog-mcp install CLIENT [options]   register the server in claude-code, claude-desktop, cursor, vscode
+       graylog-mcp investigate list|show|resume|export   read the investigations agents kept (no server needed)
 
 Run 'graylog-mcp COMMAND --help' for the options of a command.
 """
@@ -1364,6 +1365,90 @@ def _tolerant_output() -> None:
             stream.reconfigure(errors="replace")
 
 
+def _investigate(argv: list[str]) -> int:
+    """Read the investigations an agent kept, straight from the local file: it works with the server stopped. Nothing
+    here starts an agent or writes a record."""
+    from graylog_mcp import investigations
+    from graylog_mcp.investigations.model import ANY_REPO, InvestigationError, enabled
+
+    parser = argparse.ArgumentParser(
+        prog="graylog-mcp investigate", description="Read the investigations agents kept on this machine"
+    )
+    sub = parser.add_subparsers(dest="action", required=True)
+    ls = sub.add_parser("list", help="the investigations, newest first")
+    ls.add_argument("--state", choices=("running", "awaiting_input", "interrupted", "completed", "cancelled"))
+    ls.add_argument("--json", action="store_true")
+    show = sub.add_parser("show", help="one investigation as text (or --json)")
+    show.add_argument("id", help="id or label, e.g. INV-1")
+    show.add_argument("--json", action="store_true")
+    show.add_argument("--open", action="store_true", help="open it in the admin page of the running server")
+    res = sub.add_parser("resume", help="print the briefing and what to tell the agent; starts nothing")
+    res.add_argument("id")
+    exp = sub.add_parser("export", help="write it as Markdown")
+    exp.add_argument("id")
+    exp.add_argument("--format", choices=("markdown",), default="markdown")
+    exp.add_argument("--output", "-o", help="a file; default: standard output")
+    args = parser.parse_args(argv)
+    if not enabled():
+        print("investigations are off (GRAYLOG_MCP_INVESTIGATIONS=off)", file=sys.stderr)
+        return 1
+    svc = investigations.service()
+    try:
+        if args.action == "list":
+            rows = svc.list(repo=ANY_REPO, state=args.state, limit=200)
+            if args.json:
+                print(json.dumps(rows, indent=2, ensure_ascii=False))
+                return 0
+            for r in rows:
+                print(f"{r['label']:8} {r['state']:15} {r['instance']:12} {r['title']}")
+            if not rows:
+                print("no investigation yet: an agent starts one with the investigation tool")
+            return 0
+        if args.action == "show":
+            if args.json:
+                print(json.dumps(svc.get(repo=ANY_REPO, investigation_id=args.id), indent=2, ensure_ascii=False))
+            else:
+                print(svc.get(repo=ANY_REPO, investigation_id=args.id, view="export")["markdown"], end="")
+            if args.open:
+                return _open_investigation(args.id)
+            return 0
+        if args.action == "resume":
+            brief = svc.get(repo=ANY_REPO, investigation_id=args.id, view="briefing")
+            print(json.dumps(brief, indent=2, ensure_ascii=False))
+            print(
+                f"\nTell the agent: continue {brief['label']}. Read it with get_investigation "
+                f"(investigation_id='{brief['label']}', view='briefing'), then call investigation "
+                f"(action='resume', investigation_id='{brief['label']}')."
+            )
+            return 0
+        text = svc.get(repo=ANY_REPO, investigation_id=args.id, view="export")["markdown"]
+        if args.output:
+            Path(args.output).write_text(text, encoding="utf-8")
+            print(f"wrote {args.output}")
+        else:
+            print(text, end="")
+        return 0
+    except InvestigationError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 1
+
+
+def _open_investigation(label: str) -> int:
+    import webbrowser
+
+    from graylog_mcp.setup import service
+
+    port = service.current_port()
+    running = service.probe(port)
+    if not (running and running.get("admin")):
+        print("no admin page is running: 'graylog-mcp start' runs one", file=sys.stderr)
+        return 1
+    url = service.admin_url(port).replace("/admin/#", f"/admin/investigations/{label}#")
+    print(f"admin page: {url}")
+    webbrowser.open(url)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     _tolerant_output()
     argv = list(sys.argv[1:] if argv is None else argv)
@@ -1390,6 +1475,7 @@ def main(argv: list[str] | None = None) -> int:
         "version": _version,
         "keepalive": _keepalive,
         "hook": _hook,
+        "investigate": _investigate,
     }
     return handlers[command](argv)
 

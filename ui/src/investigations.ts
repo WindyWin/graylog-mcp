@@ -227,3 +227,22 @@ export function startStream(id: string) {
     };
     void run();
 }
+
+// the record as a Markdown file: fetched with the token (a link could not carry it) and saved by the browser
+export async function downloadExport(snap: InvSnapshot) {
+    try {
+        const res = await fetch(
+            `${base()}/api/investigations/${encodeURIComponent(snap.id)}/export`,
+            { headers: { "X-Admin-Token": token.value } },
+        );
+        if (!res.ok) throw new Error(res.statusText);
+        const url = URL.createObjectURL(await res.blob()),
+            a = document.createElement("a");
+        a.href = url;
+        a.download = `${snap.label}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (e) {
+        invError.value = errorText(e);
+    }
+}

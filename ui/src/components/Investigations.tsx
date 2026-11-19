@@ -8,6 +8,7 @@ import {
     chooseCheck,
     chooseEvidence,
     close,
+    downloadExport,
     invEnabled,
     invError,
     invEvidence,
@@ -24,11 +25,11 @@ import {
     stopStream,
 } from "../investigations";
 import {
-    ASSESSMENT_WORD,
     OUTCOME_WORD,
     STATE_CLASS,
     STEP_CLASS,
     STEP_WORD,
+    blockedBranches,
     bodyText,
     countText,
     leaseText,
@@ -42,12 +43,8 @@ import {
     workspaceOf,
     type CheckView,
 } from "../investigations-model";
-import type {
-    InvEvidence,
-    InvItem,
-    InvSnapshot,
-    InvStep,
-} from "../scripts/types";
+import type { InvEvidence, InvSnapshot, InvStep } from "../scripts/types";
+import { Findings } from "./InvestigationFindings";
 import { Page, Refresh, Skeleton } from "./UI";
 
 const when = (iso: string | null) =>
@@ -180,6 +177,30 @@ function Head({ snap }: { snap: InvSnapshot }) {
                     {snap.title} <span class="mono">{snap.label}</span>
                 </h2>
                 <p class="inv-question">{snap.question}</p>
+                <div class="inv-actions">
+                    <button
+                        class="btn sm"
+                        onClick={() => void downloadExport(snap)}
+                    >
+                        Export Markdown
+                    </button>
+                    {snap.follows && (
+                        <button
+                            class="btn sm ghost"
+                            onClick={() => void open(snap.follows!)}
+                        >
+                            Follows up an earlier investigation
+                        </button>
+                    )}
+                    {snap.followed_by?.map((l) => (
+                        <button
+                            class="btn sm ghost"
+                            onClick={() => void open(l)}
+                        >
+                            Followed up by {l}
+                        </button>
+                    ))}
+                </div>
             </div>
             <dl class="inv-facts">
                 <div>
@@ -276,6 +297,8 @@ function Overview({ snap }: { snap: InvSnapshot }) {
                                 <span class="inv-muted">
                                     {b.checks.length} check
                                     {b.checks.length === 1 ? "" : "s"}
+                                    {blockedBranches(snap).has(b.item.id) &&
+                                        " · waiting for your answer"}
                                 </span>
                             </button>
                         </li>
@@ -348,10 +371,6 @@ function CheckCard({ c }: { c: CheckView }) {
         </section>
     );
 }
-function assessmentLine(a: InvItem) {
-    const word = ASSESSMENT_WORD[String(a.data.assessment)] ?? "";
-    return `${word}: ${bodyText(a, "claim")}`;
-}
 function BranchPane({ snap }: { snap: InvSnapshot }) {
     const ws = workspaceOf(snap),
         sel = invSel.value,
@@ -383,19 +402,10 @@ function BranchPane({ snap }: { snap: InvSnapshot }) {
             ) : (
                 <>
                     <h3>Everything recorded</h3>
+                    <Findings snap={snap} />
                     {ws.loose.map((c) => (
                         <CheckCard c={c} />
                     ))}
-                    {!!ws.assessments.length && (
-                        <>
-                            <h4>Assessments</h4>
-                            <ul>
-                                {ws.assessments.map((a) => (
-                                    <li>{assessmentLine(a)}</li>
-                                ))}
-                            </ul>
-                        </>
-                    )}
                     <h4>Steps in order</h4>
                     {groups.map((g) => (
                         <>
