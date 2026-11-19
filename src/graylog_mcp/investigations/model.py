@@ -66,6 +66,7 @@ ACTIONS = ("start", "update", "checkpoint", "cancel", "finish", "resume")
 VIEWS = ("snapshot", "briefing", "evidence")
 
 # limits, tested in tests/test_investigations_store.py
+ANY_REPO = "\x00any"  # for the admin page, which reads the investigations of every repository
 LEASE_SECONDS = 600  # an owner idle this long may be taken over; each owned call renews it
 MAX_EVIDENCE_BYTES = 32 * 1024
 MAX_EXCERPTS = 20

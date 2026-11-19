@@ -24,6 +24,7 @@ from typing import Any
 
 from graylog_mcp.investigations import briefing
 from graylog_mcp.investigations.model import (
+    ANY_REPO,
     ASSESSMENTS,
     AWAITING,
     CANCELLED,
@@ -102,7 +103,7 @@ class Investigations:
         if not key:
             raise InvestigationError("investigation_id is required")
         row = con.execute("SELECT * FROM investigation WHERE id = ? OR label = ?", (key, str(key).upper())).fetchone()
-        if row is None or row["repo"] != repo:
+        if row is None or (repo != ANY_REPO and row["repo"] != repo):
             raise NotFound(f"no investigation {key!r} in this repository")
         return row
 
@@ -844,9 +845,14 @@ class Investigations:
 
     def list(self, *, repo: str | None, state: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         with self.store.tx() as con:
-            rows = con.execute(
-                "SELECT * FROM investigation WHERE repo IS ? ORDER BY updated DESC LIMIT ?", (repo, max(1, limit))
-            ).fetchall()
+            if repo == ANY_REPO:
+                rows = con.execute(
+                    "SELECT * FROM investigation ORDER BY updated DESC LIMIT ?", (max(1, limit),)
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT * FROM investigation WHERE repo IS ? ORDER BY updated DESC LIMIT ?", (repo, max(1, limit))
+                ).fetchall()
             out = []
             for row in rows:
                 row = self._reconcile(con, row)

@@ -1000,9 +1000,19 @@ def _start(argv: list[str]) -> int:
     _check_start_config(config_file)
     url = service.admin_url(port)
     print(f"  ✓ admin page: {url}")
+    print(f"  ✓ investigations: {_investigations_line()}")
     if not args.no_browser:
         webbrowser.open(url)
     return 0
+
+
+def _investigations_line() -> str:
+    """Whether an agent's investigation gets a link to this admin page (the shared server runs it)."""
+    from graylog_mcp import investigations
+
+    if not investigations.enabled():
+        return "off (GRAYLOG_MCP_INVESTIGATIONS=off): no investigation tools, no links"
+    return "on: an agent's investigation is kept in investigations.db and linked to this admin page"
 
 
 def _try_autostart(step: Any, *args: Any, **kwargs: Any) -> bool:
@@ -1217,6 +1227,7 @@ def _status(argv: list[str]) -> int:
         print(f"             {folder} points to another port: 'graylog-mcp start' moves it")
     if body:
         print(f"admin page:  {service.admin_url(args.port)}")
+        print(f"investigations: {_investigations_line()}")
     else:
         print("start it:    graylog-mcp start")
     return 0 if body else 1

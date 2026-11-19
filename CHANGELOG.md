@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- The admin page has an Investigations screen: the list (state in words, "needs attention" for an agent waiting or cut
+  off) and a workspace of branches, checks and steps with an evidence inspector (the query as asked beside the one that
+  ran, exact against shown counts, what was cut, excerpts as text), a live feed that survives reloads and reconnects
+  without repeating events, and an address per view (`/investigations/<id>/<branch>/<check>/<evidence>`). Steps run
+  without a check show as ad hoc steps, with no reason invented. `graylog-mcp start` says whether investigation links
+  work.
 - Persistent agent investigations: the `investigation` tool (`start`, `update`, `checkpoint`, `finish`, `cancel`,
   `resume`) and `get_investigation` keep a local record in `investigations.db` of an investigation's scope (fixed in
   absolute times), steps, bounded redacted evidence, the agent's checks and assessments, and its attempts. The Graylog

@@ -38,6 +38,7 @@ def summary(row: sqlite3.Row, scope: dict[str, Any]) -> dict[str, Any]:
         "title": row["title"],
         "question": row["question"],
         "instance": row["instance"],
+        "repo": row["repo"],
         "state": row["state"],
         "outcome": row["outcome"],
         "verification": row["verification"],

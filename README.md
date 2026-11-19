@@ -349,7 +349,8 @@ instead of the action, and a record changed since it was read is refused (`revis
 Everything is stored redacted in `investigations.db` in the home directory (sqlite, WAL; two server processes may share
 it) under a size limit that drops the oldest ended investigations' excerpts first, keeping their summaries.
 `GRAYLOG_MCP_INVESTIGATIONS=off` removes the two tools, the three arguments and their instructions, and the model sees
-exactly what it saw before. The workspace page, the export and `graylog-mcp investigate` follow; the concept is in
+exactly what it saw before. The admin page's **Investigations** screen shows them live (the list, then branches, checks and steps, then one
+piece of evidence); the export and `graylog-mcp investigate` follow; the concept is in
 [PR #48](https://github.com/ntbang0901/graylog-mcp/pull/48).
 
 ## Root cause analysis

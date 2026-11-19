@@ -29,10 +29,21 @@ from typing import Any
 import httpx
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from graylog_mcp import __version__, explorer, explorer_traces, operations, rca, recover, tools, ui_links, usage
+from graylog_mcp import (
+    __version__,
+    explorer,
+    explorer_traces,
+    investigations,
+    operations,
+    rca,
+    recover,
+    tools,
+    ui_links,
+    usage,
+)
 from graylog_mcp import secrets as secret_store
 from graylog_mcp import usage_conversations as conversations
 from graylog_mcp.client import GraylogError, QueryError
@@ -46,6 +57,8 @@ from graylog_mcp.config import (
     resolve_repo_path,
 )
 from graylog_mcp.config import _parse_redaction as parse_redaction
+from graylog_mcp.investigations import stream
+from graylog_mcp.investigations.model import ANY_REPO, InvestigationError, NotFound
 from graylog_mcp.operations import Operation
 from graylog_mcp.recording import EXPLORER, RecordContext, run_recorded
 from graylog_mcp.redact import PACKS, PROFILES, Redactor
@@ -688,6 +701,63 @@ def build_app(state: AdminState) -> Starlette:
             }
         )
 
+    def _investigations_off() -> Response | None:
+        return None if investigations.enabled() else JSONResponse({"enabled": False, "investigations": []})
+
+    async def list_investigations(request: Request) -> Response:
+        if (off := _investigations_off()) is not None:
+            return off
+        state_filter = request.query_params.get("state") or None
+        instance = request.query_params.get("instance") or None
+        rows = await investigations.run(investigations.service().list, repo=ANY_REPO, state=state_filter, limit=200)
+        if instance:
+            rows = [r for r in rows if r["instance"] == instance]
+        return JSONResponse({"enabled": True, "investigations": rows})
+
+    async def get_investigation(request: Request) -> Response:
+        if (off := _investigations_off()) is not None:
+            return off
+        svc = investigations.service()
+        try:
+            snap = await investigations.run(svc.get, repo=ANY_REPO, investigation_id=request.path_params["id"])
+        except InvestigationError as exc:
+            return _err(str(exc), 404 if isinstance(exc, NotFound) else 400)
+        return JSONResponse({"enabled": True, **snap})
+
+    async def get_investigation_evidence(request: Request) -> Response:
+        if (off := _investigations_off()) is not None:
+            return off
+        try:
+            found = await investigations.run(
+                investigations.service().get,
+                repo=ANY_REPO,
+                investigation_id=request.path_params["id"],
+                view="evidence",
+                evidence_id=request.path_params["eid"],
+            )
+        except InvestigationError as exc:
+            return _err(str(exc), 404 if isinstance(exc, NotFound) else 400)
+        return JSONResponse(found)
+
+    async def investigation_events(request: Request) -> Response:
+        if (off := _investigations_off()) is not None:
+            return off
+        try:
+            after = max(0, int(request.query_params.get("after") or request.headers.get("last-event-id") or 0))
+        except ValueError:
+            return _err("after must be a number")
+        key = request.path_params["id"]
+        try:  # a missing investigation is a 404 before the stream starts, not an error inside it
+            await investigations.run(investigations.service().get, repo=ANY_REPO, investigation_id=key, view="evidence")
+        except InvestigationError as exc:
+            return _err(str(exc), 404 if isinstance(exc, NotFound) else 400)
+        follow = request.query_params.get("follow") != "0"
+        return StreamingResponse(
+            stream.feed(key, after, follow=follow, gone=request.is_disconnected),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
     def _range(request: Request) -> tuple[str, int, int]:
         """24h in hourly buckets (default) or 7d in 6-hour buckets."""
         return ("7d", 168, 6) if request.query_params.get("range") == "7d" else ("24h", 24, 1)
@@ -1064,6 +1134,10 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/redact", redact_preview, methods=["POST"]),
         Route("/api/run", run_tool, methods=["POST"]),
         Route("/api/doctor", run_doctor),
+        Route("/api/investigations", list_investigations),
+        Route("/api/investigations/{id}", get_investigation),
+        Route("/api/investigations/{id}/events", investigation_events),
+        Route("/api/investigations/{id}/evidence/{eid}", get_investigation_evidence),
         Route("/api/usage", get_usage),
         Route("/api/conversations", get_conversations),
         Route("/api/conversations/{id}", get_conversation),
