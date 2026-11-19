@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- The admin page's Logs screen: an opened message (All logs, and the Overview's log drawer) has an **Open trace** button
+  that shows its trace on the By trace tab, over an hour either side of the message. It is absent when no trace field is
+  configured, the message lacks it, or redaction masked it.
 - Each tool call is now recorded when it starts and when it ends, with who called it (the conversation: a Codex
   session, the HTTP session, else the server process; the client's tool call id; the client), the Graylog requests it
   sent (path, redacted query, wait, duration, status, retries) and the first 2,000 characters of its redacted result.

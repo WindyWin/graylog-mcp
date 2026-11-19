@@ -5,6 +5,8 @@ import {
     LOG_WINDOW,
     firstLine,
     fmtMs,
+    isMasked,
+    type ExplorerMessage,
     type MessagesAnswer,
     type TraceAnswer,
     type TracesAnswer,
@@ -13,6 +15,7 @@ import {
     currentWindow,
     narrowTo,
     openRows,
+    openTrace,
     toggleRow,
     update,
     view,
@@ -179,6 +182,28 @@ function Footer({ d, top }: { d: MessagesAnswer; top: () => void }) {
         </div>
     );
 }
+// "Open trace" on an opened message: the trace's timeline, over an hour either side of the message. Absent when the
+// message has no trace id the explorer can look up (none configured, not on the line, or masked by redaction).
+function TraceButton({
+    m,
+    field,
+}: {
+    m: ExplorerMessage;
+    field: string | null;
+}) {
+    const id = field ? String(m[field] ?? "").trim() : "";
+    if (!id || isMasked(id)) return null;
+    return (
+        <button
+            class="btn sm"
+            type="button"
+            title={`The messages of ${field} ${id}, an hour either side of this one`}
+            onClick={() => void openTrace(m, field)}
+        >
+            Open trace
+        </button>
+    );
+}
 export function MessagesTable({
     d,
     top,
@@ -257,7 +282,17 @@ export function MessagesTable({
                                     {isOpen && (
                                         <tr class="lg-det">
                                             <td colSpan={4}>
-                                                <MessageDetail m={m} />
+                                                <MessageDetail
+                                                    m={m}
+                                                    actions={
+                                                        <TraceButton
+                                                            m={m}
+                                                            field={
+                                                                d.fields.trace
+                                                            }
+                                                        />
+                                                    }
+                                                />
                                             </td>
                                         </tr>
                                     )}

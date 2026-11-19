@@ -10,7 +10,8 @@ import {
     openLogs,
     phrase,
 } from "../logs";
-import { openInLogs } from "../explorer-store";
+import { openInLogs, openTrace } from "../explorer-store";
+import { isMasked } from "../explorer";
 import type { Fields, LogLine } from "../scripts/types";
 import { revealRows } from "../scripts/motion";
 import { AsyncButton, Close, Dialog, Icon, Segment, num } from "./UI";
@@ -166,6 +167,21 @@ function LogRow({
                                         }
                                     >
                                         Follow {trace}
+                                    </button>
+                                )}
+                                {trace && !isMasked(String(detail[trace])) && (
+                                    <button
+                                        class="btn sm"
+                                        title="The trace timeline, an hour either side of this line"
+                                        onClick={() =>
+                                            void openTrace(
+                                                { ...detail, ts: m.ts },
+                                                trace,
+                                                view.instance ?? undefined,
+                                            )
+                                        }
+                                    >
+                                        Open trace
                                     </button>
                                 )}
                                 <button

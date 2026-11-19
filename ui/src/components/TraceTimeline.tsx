@@ -1,3 +1,4 @@
+import type { ComponentChildren } from "preact";
 import { levelOf } from "../logs";
 import {
     firstLine,
@@ -15,7 +16,13 @@ export function LevelBadge({ level }: { level: unknown }) {
     return <span class={`badge ${lv.cls}`}>{lv.word}</span>;
 }
 // every field as a tree; a multi-line message (a stack trace) folded above it
-export function MessageDetail({ m }: { m: ExplorerMessage }) {
+export function MessageDetail({
+    m,
+    actions,
+}: {
+    m: ExplorerMessage;
+    actions?: ComponentChildren;
+}) {
     const lines = String(m.full_message || m.message || "").split("\n"),
         rest: ExplorerMessage = { ...m };
     delete rest.full_message;
@@ -34,6 +41,7 @@ export function MessageDetail({ m }: { m: ExplorerMessage }) {
                     </pre>
                 </details>
             )}
+            {actions && <div class="lacts">{actions}</div>}
             <div class="tree">
                 <JsonTree value={rest as Json} />
             </div>

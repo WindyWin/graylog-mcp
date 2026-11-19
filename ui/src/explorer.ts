@@ -206,6 +206,46 @@ export function requestOf(v: ExplorerView): { slot: Slot; url: string } {
     }[slot];
     return { slot, url: `/api/explorer/${path}?${q}` };
 }
+// ------------------------------------------------------------------ trace of one message
+const TRACE_SPAN_MS = 3600_000; // an hour either side of the message
+// a value the redactor masked ("[REDACTED]", "[EMAIL]"): the explorer cannot look it up
+export const isMasked = (v: string) => /^\[[A-Z][A-Z_]*\]$/.test(v);
+// the window around a message's time, in the message's own notation: absolute when its text carries an offset,
+// else the wall clock of the instance, which the server reads in the instance's zone
+export function aroundTime(
+    ts: string,
+    ms = TRACE_SPAN_MS,
+): { from: string; to: string } | null {
+    const iso = ts.trim().replace(" ", "T"),
+        zoned = /(Z|[+-]\d\d:?\d\d)$/.test(iso),
+        at = Date.parse(zoned ? iso : `${iso}Z`);
+    if (Number.isNaN(at)) return null;
+    const text = (t: number) =>
+        zoned
+            ? new Date(t).toISOString()
+            : new Date(t).toISOString().slice(0, 19);
+    return { from: text(at - ms), to: text(at + ms) };
+}
+// The By trace tab on the trace of one message, or null when it has none the explorer can follow: no trace field
+// is configured, the message lacks it, redaction masked it, or its time is unreadable.
+export function traceViewOf(
+    current: ExplorerView,
+    m: ExplorerMessage,
+    field: string | null,
+): ExplorerView | null {
+    const id = field ? String(m[field] ?? "").trim() : "";
+    const window = aroundTime(String(m.ts ?? ""));
+    if (!id || isMasked(id) || !window || !current.instance) return null;
+    return normalView({
+        ...current,
+        tab: "traces",
+        q: "",
+        range: "",
+        ...window,
+        trace: id,
+        offset: 0,
+    });
+}
 // narrow the query: an extra clause ANDed to it, for a click on a status, an API or an application
 export const drillQuery = (q: string, clause: string) =>
     q && q !== "*" ? `(${q}) AND ${clause}` : clause;

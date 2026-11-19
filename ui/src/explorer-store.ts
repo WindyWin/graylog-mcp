@@ -21,11 +21,13 @@ import {
     recentViews,
     requestOf,
     savedOf,
+    traceViewOf,
     viewKey,
     viewOfRoute,
     viewOfSaved,
     windowOf,
     type Answers,
+    type ExplorerMessage,
     type ExplorerView,
     type SavedView,
     type Slot,
@@ -238,4 +240,32 @@ export async function openInLogs(v: {
         openRows.value = new Set();
         await navigate("logs");
     }
+}
+// The By trace tab on the trace of a message, from the Logs screen (its view and streams stay) or from another
+// screen, which names the instance. False when the message has no trace the explorer can follow.
+export async function openTrace(
+    m: ExplorerMessage,
+    field: string | null,
+    instance?: string,
+): Promise<boolean> {
+    const here = isCurrent(),
+        next = traceViewOf(
+            here
+                ? view.value
+                : {
+                      ...view.value,
+                      instance: instance ?? view.value.instance,
+                      streams: "",
+                  },
+            m,
+            field,
+        );
+    if (!next) return false;
+    if (here) update(next);
+    else {
+        view.value = next;
+        openRows.value = new Set();
+        await navigate("logs");
+    }
+    return true;
 }

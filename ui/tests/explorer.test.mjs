@@ -81,3 +81,71 @@ test("a broken favourites entry is dropped, not thrown", () => {
         1,
     );
 });
+
+test("the trace of a message opens the By trace tab on an hour around it", () => {
+    const current = {
+        ...explorer.DEFAULT_VIEW,
+        tab: "all",
+        instance: "acme/prod",
+        q: "level:3",
+        offset: 200,
+    };
+    const m = { ts: "2026-11-18 10:30:00.000", trace_id: "fake-trace-1" };
+    const v = explorer.traceViewOf(current, m, "trace_id");
+    assert.equal(v.tab, "traces");
+    assert.equal(v.trace, "fake-trace-1");
+    assert.equal(v.q, "");
+    assert.equal(v.range, "");
+    assert.equal(v.from, "2026-11-18T09:30:00");
+    assert.equal(v.to, "2026-11-18T11:30:00");
+    assert.equal(v.offset, 0);
+    assert.match(
+        explorer.explorerPath(v),
+        /\/logs\/traces\?.*trace=fake-trace-1/,
+    );
+});
+
+test("a message with an offset keeps absolute times", () => {
+    const m = { ts: "2026-11-18T10:30:00+07:00", trace_id: "fake-trace-1" };
+    const v = explorer.traceViewOf(
+        { ...explorer.DEFAULT_VIEW, instance: "acme/prod" },
+        m,
+        "trace_id",
+    );
+    assert.equal(v.from, "2026-11-18T02:30:00.000Z");
+    assert.equal(v.to, "2026-11-18T04:30:00.000Z");
+});
+
+test("no trace view without a trace id the explorer can look up", () => {
+    const current = { ...explorer.DEFAULT_VIEW, instance: "acme/prod" };
+    const at = "2026-11-18 10:30:00.000";
+    assert.equal(explorer.traceViewOf(current, { ts: at }, "trace_id"), null);
+    assert.equal(
+        explorer.traceViewOf(
+            current,
+            { ts: at, trace_id: "[REDACTED]" },
+            "trace_id",
+        ),
+        null,
+    );
+    assert.equal(
+        explorer.traceViewOf(current, { ts: at, trace_id: "x" }, null),
+        null,
+    );
+    assert.equal(
+        explorer.traceViewOf(
+            current,
+            { ts: "not a time", trace_id: "x" },
+            "trace_id",
+        ),
+        null,
+    );
+    assert.equal(
+        explorer.traceViewOf(
+            { ...current, instance: null },
+            { ts: at, trace_id: "x" },
+            "trace_id",
+        ),
+        null,
+    );
+});
