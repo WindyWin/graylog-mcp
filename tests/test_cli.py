@@ -143,4 +143,6 @@ def test_start_says_whether_investigation_links_will_work(monkeypatch):
 
     assert _investigations_line().startswith("on:") and "admin page" in _investigations_line()
     monkeypatch.setenv("GRAYLOG_MCP_INVESTIGATIONS", "off")
-    assert _investigations_line().startswith("off")
+    assert _investigations_line().startswith("off") and "GRAYLOG_MCP_INVESTIGATIONS=off" in _investigations_line()
+    monkeypatch.delenv("GRAYLOG_MCP_INVESTIGATIONS")
+    assert "admin page" in _investigations_line() and _investigations_line().startswith("off")

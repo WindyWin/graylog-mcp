@@ -10,6 +10,8 @@ import {
     close,
     downloadExport,
     invEnabled,
+    invRestart,
+    invSource,
     invError,
     invEvidence,
     invFilter,
@@ -21,6 +23,7 @@ import {
     loadSnapshot,
     open,
     setInvFilter,
+    setInvestigations,
     startStream,
     stopStream,
 } from "../investigations";
@@ -640,6 +643,16 @@ export function Investigations() {
                     {sel.id && LIVE_WORD[invLive.value] && (
                         <span class="badge">{LIVE_WORD[invLive.value]}</span>
                     )}
+                    {invEnabled.value &&
+                        invSource.value !== "env" &&
+                        !sel.id && (
+                            <button
+                                class="btn sm ghost"
+                                onClick={() => void setInvestigations(false)}
+                            >
+                                Turn off
+                            </button>
+                        )}
                     <Refresh
                         run={() =>
                             sel.id ? loadSnapshot(sel.id) : loadInvestigations()
@@ -653,13 +666,39 @@ export function Investigations() {
                     {invError.value}
                 </div>
             )}
+            {invRestart.value && (
+                <div class="inline-msg" role="status">
+                    Saved. A running server reads this when it starts: restart
+                    it (<code>graylog-mcp start</code>) for new agent sessions
+                    to {invEnabled.value ? "get" : "lose"} the investigation
+                    tools.
+                </div>
+            )}
             {!invEnabled.value ? (
                 <div class="empty">
                     <h3>Investigations are off</h3>
                     <div>
-                        <code>GRAYLOG_MCP_INVESTIGATIONS=off</code> is set for
-                        this server. Remove it and restart to keep
-                        investigations.
+                        When on, a connected agent can keep a record of what it
+                        asked, checked and concluded, and it appears here. It
+                        adds the <code>investigation</code> and{" "}
+                        <code>get_investigation</code> tools, and about 9 KB to
+                        each session's tool list.
+                    </div>
+                    <div class="actions">
+                        {invSource.value === "env" ? (
+                            <p class="inv-muted">
+                                <code>GRAYLOG_MCP_INVESTIGATIONS</code> is set
+                                for this server and decides; unset it to use
+                                this switch.
+                            </p>
+                        ) : (
+                            <button
+                                class="btn primary"
+                                onClick={() => void setInvestigations(true)}
+                            >
+                                Turn investigations on
+                            </button>
+                        )}
                     </div>
                 </div>
             ) : !sel.id ? (

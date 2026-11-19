@@ -1011,8 +1011,10 @@ def _investigations_line() -> str:
     """Whether an agent's investigation gets a link to this admin page (the shared server runs it)."""
     from graylog_mcp import investigations
 
-    if not investigations.enabled():
-        return "off (GRAYLOG_MCP_INVESTIGATIONS=off): no investigation tools, no links"
+    on, source = investigations.switch()
+    if not on:
+        how = "GRAYLOG_MCP_INVESTIGATIONS=off" if source == "env" else "turn on in the admin page, Investigations"
+        return f"off ({how}): no investigation tools, no links"
     return "on: an agent's investigation is kept in investigations.db and linked to this admin page"
 
 
@@ -1390,7 +1392,7 @@ def _investigate(argv: list[str]) -> int:
     exp.add_argument("--output", "-o", help="a file; default: standard output")
     args = parser.parse_args(argv)
     if not enabled():
-        print("investigations are off (GRAYLOG_MCP_INVESTIGATIONS=off)", file=sys.stderr)
+        print("investigations are off: turn them on in the admin page (Investigations)", file=sys.stderr)
         return 1
     svc = investigations.service()
     try:

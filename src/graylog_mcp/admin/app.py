@@ -59,6 +59,8 @@ from graylog_mcp.config import (
 from graylog_mcp.config import _parse_redaction as parse_redaction
 from graylog_mcp.investigations import stream
 from graylog_mcp.investigations.model import ANY_REPO, InvestigationError, NotFound
+from graylog_mcp.investigations.model import set_enabled as set_investigations_enabled
+from graylog_mcp.investigations.model import switch as investigations_switch
 from graylog_mcp.operations import Operation
 from graylog_mcp.recording import EXPLORER, RecordContext, run_recorded
 from graylog_mcp.redact import PACKS, PROFILES, Redactor
@@ -701,8 +703,25 @@ def build_app(state: AdminState) -> Starlette:
             }
         )
 
+    def _switch_state() -> dict[str, Any]:
+        on, source = investigations_switch()
+        return {"enabled": on, "source": source}
+
     def _investigations_off() -> Response | None:
-        return None if investigations.enabled() else JSONResponse({"enabled": False, "investigations": []})
+        return None if investigations.enabled() else JSONResponse({**_switch_state(), "investigations": []})
+
+    async def set_investigations(request: Request) -> Response:
+        """The page's switch. ``GRAYLOG_MCP_INVESTIGATIONS`` wins over it, and says so. Agents' servers read the
+        choice when they start, so it applies to new sessions after a restart."""
+        body = await _body(request)
+        if not isinstance(body.get("enabled"), bool):
+            return _err("enabled must be true or false")
+        if investigations_switch()[1] == "env":
+            return _err(
+                "GRAYLOG_MCP_INVESTIGATIONS is set for this server and decides; unset it to use this switch", 409
+            )
+        set_investigations_enabled(body["enabled"])
+        return JSONResponse({**_switch_state(), "restart": True})
 
     async def list_investigations(request: Request) -> Response:
         if (off := _investigations_off()) is not None:
@@ -712,7 +731,7 @@ def build_app(state: AdminState) -> Starlette:
         rows = await investigations.run(investigations.service().list, repo=ANY_REPO, state=state_filter, limit=200)
         if instance:
             rows = [r for r in rows if r["instance"] == instance]
-        return JSONResponse({"enabled": True, "investigations": rows})
+        return JSONResponse({**_switch_state(), "investigations": rows})
 
     async def get_investigation(request: Request) -> Response:
         if (off := _investigations_off()) is not None:
@@ -722,7 +741,7 @@ def build_app(state: AdminState) -> Starlette:
             snap = await investigations.run(svc.get, repo=ANY_REPO, investigation_id=request.path_params["id"])
         except InvestigationError as exc:
             return _err(str(exc), 404 if isinstance(exc, NotFound) else 400)
-        return JSONResponse({"enabled": True, **snap})
+        return JSONResponse({**_switch_state(), **snap})
 
     async def get_investigation_evidence(request: Request) -> Response:
         if (off := _investigations_off()) is not None:
@@ -1151,6 +1170,7 @@ def build_app(state: AdminState) -> Starlette:
         Route("/api/run", run_tool, methods=["POST"]),
         Route("/api/doctor", run_doctor),
         Route("/api/investigations", list_investigations),
+        Route("/api/investigations/switch", set_investigations, methods=["POST"]),
         Route("/api/investigations/{id}", get_investigation),
         Route("/api/investigations/{id}/events", investigation_events),
         Route("/api/investigations/{id}/export", export_investigation),

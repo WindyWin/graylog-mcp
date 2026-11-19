@@ -1,8 +1,9 @@
 """Persistent agent investigations: a local record of what was asked, what ran, what it showed and what was concluded.
 
 The server stays read-only towards Graylog. This package writes to one local sqlite file (``investigations.db`` in
-the home directory), the way ``usage/`` is written. ``GRAYLOG_MCP_INVESTIGATIONS=off`` removes the two tools and the
-extra arguments. The concept is in ``docs/concepts/agent-investigations/``.
+the home directory), the way ``usage/`` is written. They are off until the admin page's Investigations screen (or
+``GRAYLOG_MCP_INVESTIGATIONS=on``) turns them on; off, there are no tools or extra arguments. The concept is in
+``docs/concepts/agent-investigations/``.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
-from graylog_mcp.investigations.model import enabled
+from graylog_mcp.investigations.model import enabled, switch
 from graylog_mcp.investigations.service import Investigations
 from graylog_mcp.investigations.store import Store
 
@@ -50,4 +51,4 @@ async def recover() -> None:
             await run(service().recover)
 
 
-__all__ = ["enabled", "path", "recover", "run", "service"]
+__all__ = ["enabled", "path", "recover", "run", "service", "switch"]

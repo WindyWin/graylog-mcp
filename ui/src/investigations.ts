@@ -35,6 +35,10 @@ export const STATES = [
     "cancelled",
 ];
 export const invEnabled = signal(true);
+// what decided it: "env" (GRAYLOG_MCP_INVESTIGATIONS, which the page cannot change), "setting" or "default"
+export const invSource = signal("default");
+// set when the switch was just changed: running servers read it at start
+export const invRestart = signal(false);
 export const invList = signal<InvSummary[] | null>(null);
 export const invError = signal("");
 export const invFilter = signal({ state: "all", instance: "" });
@@ -92,9 +96,11 @@ export async function loadInvestigations() {
         if (f.instance) q.set("instance", f.instance);
         const got = await api<{
             enabled: boolean;
+            source: string;
             investigations: InvSummary[];
         }>(`/api/investigations?${q}`);
         invEnabled.value = got.enabled;
+        invSource.value = got.source;
         invList.value = got.investigations;
         invError.value = "";
     } catch (e) {
@@ -242,6 +248,24 @@ export async function downloadExport(snap: InvSnapshot) {
         a.download = `${snap.label}.md`;
         a.click();
         URL.revokeObjectURL(url);
+    } catch (e) {
+        invError.value = errorText(e);
+    }
+}
+
+// the page's switch; agents' servers read it when they start
+export async function setInvestigations(enabled: boolean) {
+    try {
+        const got = await api<{ enabled: boolean; source: string }>(
+            "/api/investigations/switch",
+            "POST",
+            { enabled },
+        );
+        invEnabled.value = got.enabled;
+        invSource.value = got.source;
+        invRestart.value = true;
+        invError.value = "";
+        await loadInvestigations();
     } catch (e) {
         invError.value = errorText(e);
     }

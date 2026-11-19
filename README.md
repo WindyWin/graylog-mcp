@@ -352,8 +352,10 @@ instead of the action, and a record changed since it was read is refused (`revis
 
 Everything is stored redacted in `investigations.db` in the home directory (sqlite, WAL; two server processes may share
 it) under a size limit that drops the oldest ended investigations' excerpts first, keeping their summaries.
-`GRAYLOG_MCP_INVESTIGATIONS=off` removes the two tools, the three arguments and their instructions, and the model sees
-exactly what it saw before. The admin page's **Investigations** screen shows them live (the list, then branches, checks and steps, then one
+Investigations are **off until you turn them on** (they add about 9 KB to every session's tool list): on the admin
+page's Investigations screen, or with `GRAYLOG_MCP_INVESTIGATIONS=on`, which decides over the page's switch (`=off`
+forces them off). Off, the two tools, the three arguments and their instructions are not there and the model sees
+exactly what it saw before. A running server reads the switch when it starts. The admin page's **Investigations** screen shows them live (the list, then branches, checks and steps, then one
 piece of evidence); `graylog-mcp investigate list|show|resume|export` reads them without the server (`resume` prints the briefing and the
 sentence to give an agent; it starts nothing), and the page exports Markdown; the concept is in
 [PR #48](https://github.com/ntbang0901/graylog-mcp/pull/48).
@@ -476,7 +478,7 @@ Environment variables:
 | `GRAYLOG_MCP_CONFIG` | path of a TOML config file |
 | `GRAYLOG_MCP_HTTP_TOKEN` | bearer token required by the HTTP transport |
 | `GRAYLOG_MCP_HOME` | the server's state folder: admin token, pid, log and recorded calls (default `~/.config/graylog-mcp`) |
-| `GRAYLOG_MCP_INVESTIGATIONS` | `off` removes the `investigation` and `get_investigation` tools and the `investigation_id`, `check_id` and `owner_fence` arguments (see [Investigations](#investigations)) |
+| `GRAYLOG_MCP_INVESTIGATIONS` | `on` adds the `investigation` and `get_investigation` tools and the `investigation_id`, `check_id` and `owner_fence` arguments; `off` removes them. Without it, the admin page's switch decides, and the default is off (see [Investigations](#investigations)) |
 | `GRAYLOG_MCP_USAGE` | `calls` records the calls without their result previews, `off` records nothing (see [the admin UI](#setup-helpers-and-admin-ui)) |
 | `GRAYLOG_MCP_USAGE_HOT_DAYS`, `GRAYLOG_MCP_USAGE_DAYS`, `GRAYLOG_MCP_USAGE_SESSION_DAYS`, `GRAYLOG_MCP_USAGE_MAX_MB` | how long recorded calls keep every detail (default 2 days), their summary (15, at the least) and one line per conversation (90), and the folder's size limit (50 MB) |
 

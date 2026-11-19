@@ -228,7 +228,7 @@ async def test_with_investigations_off_the_page_gets_an_empty_answer(world, monk
     _, inv, _, client = world
     monkeypatch.setenv("GRAYLOG_MCP_INVESTIGATIONS", "off")
     got = (await client.get("/api/investigations")).json()
-    assert got == {"enabled": False, "investigations": []}
+    assert got == {"enabled": False, "source": "env", "investigations": []}
     assert (await client.get(f"/api/investigations/{inv['id']}")).json()["enabled"] is False
 
 

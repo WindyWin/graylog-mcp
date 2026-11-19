@@ -11,6 +11,7 @@ import re
 import secrets
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from graylog_mcp.tools import ToolInputError
@@ -117,9 +118,42 @@ def valid_id(value: object) -> str:
     return value
 
 
+_ON = {"on", "1", "true", "yes"}
+_OFF = {"off", "0", "false", "no"}
+
+
+def setting_path() -> Path:
+    from graylog_mcp.setup.service import home_dir
+
+    return home_dir() / "investigations-switch"
+
+
+def switch() -> tuple[bool, str]:
+    """Whether investigations are on and what decided it: ``GRAYLOG_MCP_INVESTIGATIONS`` (``env``), else the switch the
+    admin page keeps (``setting``), else off (``default``). Off means no investigation tools or arguments."""
+    word = os.environ.get("GRAYLOG_MCP_INVESTIGATIONS", "").strip().lower()
+    if word in _ON | _OFF:
+        return word in _ON, "env"
+    try:
+        saved = setting_path().read_text(encoding="utf-8").strip().lower()
+    except OSError:
+        saved = ""
+    if saved in _ON | _OFF:
+        return saved in _ON, "setting"
+    return False, "default"
+
+
 def enabled() -> bool:
-    """On unless ``GRAYLOG_MCP_INVESTIGATIONS=off``: then there are no investigation tools or arguments."""
-    return os.environ.get("GRAYLOG_MCP_INVESTIGATIONS", "").strip().lower() not in {"off", "0", "false", "no"}
+    return switch()[0]
+
+
+def set_enabled(on: bool) -> None:
+    """Keep the choice made in the admin page. Servers read it when they start, so a running one needs a restart."""
+    path = setting_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text("on\n" if on else "off\n", encoding="utf-8")
+    tmp.replace(path)
 
 
 @dataclass(frozen=True)

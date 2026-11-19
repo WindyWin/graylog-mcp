@@ -53,7 +53,9 @@ async def begin(app: Any, ctx: Any, identity: dict[str, Any], op_name: str, kwar
     from graylog_mcp.shared import current_repo
 
     if not investigations.enabled():
-        raise InvestigationError("investigations are switched off (GRAYLOG_MCP_INVESTIGATIONS=off)")
+        raise InvestigationError(
+            "investigations are switched off (the admin page's Investigations screen turns them on)"
+        )
     # the instance the call names: its own argument, else the one its preset names; none means "the investigation's"
     named = kwargs.get("instance")
     if not named and op_name == "run_preset":
